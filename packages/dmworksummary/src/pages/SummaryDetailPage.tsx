@@ -19,7 +19,7 @@ import type {
     ScheduleItem,
     ScheduleConfig,
 } from "../types/summary";
-import { TaskStatus, SummaryMode, ParticipantStatus, SourceType } from "../types/summary";
+import { TaskStatus, SummaryMode, ParticipantStatus } from "../types/summary";
 import {
     formatDate,
     canCancel,
@@ -29,6 +29,7 @@ import {
 } from "../utils/summaryHelpers";
 import SummaryContent from "../components/SummaryContent";
 import CitationText from "../components/CitationText";
+import SelectedSourcesPanel from "../components/SelectedSourcesPanel";
 import ScheduleConfigModal from "../components/ScheduleConfigModal";
 
 interface SummaryDetailPageProps {
@@ -495,30 +496,6 @@ export default class SummaryDetailPage extends Component<SummaryDetailPageProps,
         return (
             <div className="summary-detail-result">
                 <CitationText content={detail.result.content} citations={detail.result.citations || []} />
-                {detail.sources && detail.sources.length > 0 && (
-                    <div style={{ marginTop: 12, fontSize: 12, color: "var(--semi-color-text-2)" }}>
-                        <div style={{ marginBottom: 4 }}>信息来源：</div>
-                        {detail.sources.map((s: any, idx: number) => {
-                            const channelType = s.source_type === SourceType.DIRECT_MESSAGE
-                                ? ChannelTypePerson
-                                : ChannelTypeGroup;
-                            return (
-                                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                                    <span>{s.source_name}</span>
-                                    <span
-                                        style={{ color: "var(--semi-color-primary)", cursor: "pointer", fontSize: 12 }}
-                                        onClick={() => {
-                                            const channel = new Channel(s.source_id, channelType);
-                                            WKApp.endpoints.showConversation(channel);
-                                        }}
-                                    >
-                                        进入聊天
-                                    </span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
                 <div className="summary-detail-result-meta">
                     <span>版本 {detail.result.version}</span>
                     <span>·</span>
@@ -841,6 +818,8 @@ export default class SummaryDetailPage extends Component<SummaryDetailPageProps,
                         )}
 
                         {detail.status === TaskStatus.COMPLETED && detail.summary_mode !== SummaryMode.BY_PERSON && this.renderCompleted()}
+
+                        <SelectedSourcesPanel sources={detail.sources} />
                     </>
                 )}
 
