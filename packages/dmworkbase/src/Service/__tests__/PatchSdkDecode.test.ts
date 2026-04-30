@@ -107,13 +107,23 @@ describe("applyMsgLevelExternalFields — works on arbitrary target (Message or 
 })
 
 /**
- * dmwork-web#1069 round 4：
+ * dmwork-web#1069 round 4 / R5 follow-up:
  *
- * WebSocket 推送 / send-ack 回放路径（Message.fromSendPacket / `new Message(recvPacket)`）
- * 的二进制 wire protocol 不携带 from_home_space_* 字段，只能通过 fromUID 反查
- * channelInfo.orgData 兜底。`applyMsgLevelExternalFieldsWithFallback`
- * 与 `patchSdkDecodeForExternalFields` 对 `Message.fromSendPacket` 的 wrap
- * 确保这条路径的 Message 对象最终携带 home_space_id / home_space_name。
+ * WebSocket push and send-ack replay paths (Message.fromSendPacket /
+ * `new Message(recvPacket)`) use the binary wire protocol, which does not
+ * carry from_home_space_* fields — they can only be recovered by looking up
+ * channelInfo.orgData via fromUID. `applyMsgLevelExternalFieldsWithFallback`
+ * performs this fallback.
+ *
+ * Note (R5, PR#1081): the R4 SDK prototype wrap on `Message.fromSendPacket`
+ * (and on `ChatManager.prototype.notifyMessageListeners`) has been removed.
+ * `patchSdkDecodeForExternalFields` now patches only `Reply.prototype.decode`.
+ * The WebSocket push / self-send / send-ack Message paths fill in
+ * home_space_id / home_space_name at the business layer via
+ * `ConversationVM.messageListener` (registered in `didMount`) and
+ * `ConversationVM.sendMessage` tail handling — see the aligned comment in
+ * `packages/dmworkbase/src/module.tsx#init`. The tests below exercise the
+ * pure fallback helper; they do not depend on any SDK prototype wrap.
  */
 describe("applyMsgLevelExternalFieldsWithFallback — channelInfo fallback", () => {
     const yujiaweiUID = "uid-yujiawei"

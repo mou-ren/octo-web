@@ -130,11 +130,14 @@ export default class BaseModule implements IModule {
     return "base";
   }
   init(): void {
-    // dmwork-web#1069 round 2/4：补齐 WKSDK 内部 decode / 构造路径的
-    // msg-level 外部来源字段（Reply.prototype.decode / Message.fromSendPacket /
-    // ChatManager.notifyMessageListeners），使 WebSocket 推送、发送回放、
-    // 引用消息预览都与 Convert.toMessage / MergeforwardContent.mapToMessage
-    // 行为一致。幂等。
+    // dmwork-web#1069 round 2/3/5：补齐 WKSDK `Reply.prototype.decode` 中的
+    // msg-level 外部来源字段，使引用消息预览与 Convert.toMessage /
+    // MergeforwardContent.mapToMessage 行为一致。
+    //
+    // R5（PR#1081）已撤掉 R4 曾经追加的另外两个 SDK prototype patch
+    // （Message.fromSendPacket / ChatManager.prototype.notifyMessageListeners），
+    // WebSocket 推送、自发送、send-ack 回放路径改在业务层 ConversationVM
+    // 收尾处补字段。此处仅剩 Reply.decode 一个受控 patch。幂等。
     patchSdkDecodeForExternalFields();
 
     APIClient.shared.logoutCallback = () => {
