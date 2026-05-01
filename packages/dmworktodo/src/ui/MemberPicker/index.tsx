@@ -23,7 +23,7 @@ interface MemberPickerDirectProps {
   mode: 'direct';
   todoId: string;
   assignees: TodoAssignee[];
-  onChanged?: () => void;
+  onChanged?: (addedUid?: string, removedUid?: string) => void;
   channel?: { channelId: string; channelType: number };
   placeholder?: string;
   disabled?: boolean;
@@ -43,9 +43,25 @@ function MemberTag({
   disabled?: boolean;
 }) {
   const name = useUserName(uid);
+  const avatarUrl = WKApp.shared.avatarUser(uid);
+  const initial = (name || uid).charAt(0).toUpperCase();
+  const bgColor = `hsl(${(uid?.charCodeAt(0) ?? 65) * 5 % 360}, 60%, 55%)`;
 
   return (
     <span className="wk-member-picker__tag">
+      <span style={{ position: 'relative', width: 16, height: 16, flexShrink: 0, display: 'inline-flex' }}>
+        <img
+          src={avatarUrl}
+          alt=""
+          style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+        <span style={{
+          width: 16, height: 16, borderRadius: '50%', background: bgColor,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '9px', fontWeight: 700, color: '#fff',
+        }}>{initial}</span>
+      </span>
       <span className="wk-member-picker__tag-name">{name}</span>
       {!disabled && (
         <button
@@ -89,10 +105,20 @@ function MemberOption({
       }}
     >
       <div className="wk-member-picker__option-avatar">
-        {member.avatar && isSafeUrl(member.avatar) ? (
-          <img src={member.avatar} alt="" />
-        ) : (
-          <div className="wk-member-picker__option-avatar-placeholder" />
+        <img
+          src={member.avatar || ''}
+          alt=""
+          style={{ display: member.avatar ? undefined : 'none' }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+        {!member.avatar && (
+          <div className="wk-member-picker__option-avatar-placeholder" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '11px', fontWeight: 600, color: '#fff',
+            background: `hsl(${(member.name?.charCodeAt(0) ?? 65) * 5 % 360}, 60%, 55%)`,
+          }}>
+            {(member.name || member.uid).charAt(0).toUpperCase()}
+          </div>
         )}
       </div>
       <div className="wk-member-picker__option-info">
@@ -189,13 +215,13 @@ export default function MemberPicker(props: MemberPickerProps) {
       try {
         if (action === 'add') {
           await api.addAssignee(todoId, uid);
+          onChanged?.(uid, undefined);
         } else {
           await api.removeAssignee(todoId, uid);
+          onChanged?.(undefined, uid);
         }
-        onChanged?.();
       } catch (error) {
         Toast.error(`${action === 'add' ? '添加' : '移除'}成员失败`);
-        onChanged?.();
       }
     },
     [todoId, onChanged]

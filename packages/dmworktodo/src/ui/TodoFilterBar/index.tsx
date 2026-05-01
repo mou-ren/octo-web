@@ -5,15 +5,16 @@ import './index.css';
 export interface TodoFilterBarProps {
   filters: TodoListParams;
   onFilterChange: (filters: Partial<TodoListParams>) => void;
+  searchOnly?: boolean;
 }
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'All' },
-  { value: 'open', label: 'Open' },
-  { value: 'closed', label: 'Closed' },
+  { value: '', label: '全部' },
+  { value: 'open', label: '待处理' },
+  { value: 'closed', label: '已完成' },
 ];
 
-export default function TodoFilterBar({ filters, onFilterChange }: TodoFilterBarProps) {
+export default function TodoFilterBar({ filters, onFilterChange, searchOnly = false }: TodoFilterBarProps) {
   const [localSearch, setLocalSearch] = useState(filters.q || '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -51,21 +52,23 @@ export default function TodoFilterBar({ filters, onFilterChange }: TodoFilterBar
 
   return (
     <div className="wk-todo-filter-bar">
-      <select
-        className="wk-todo-filter-bar__select"
-        value={filters.status || ''}
-        onChange={handleStatusChange}
-      >
-        {STATUS_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      {!searchOnly && (
+        <select
+          className="wk-todo-filter-bar__select"
+          value={filters.status || ''}
+          onChange={handleStatusChange}
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      )}
       <input
         className="wk-todo-filter-bar__search"
         type="text"
-        placeholder="Search todos..."
+        placeholder="搜索任务..."
         value={localSearch}
         onChange={handleSearchChange}
       />

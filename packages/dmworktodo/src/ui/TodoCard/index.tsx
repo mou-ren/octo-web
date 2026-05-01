@@ -152,7 +152,7 @@ export default function TodoCard({
           {isClosed && <span className="wk-todo-card__checkbox-check">✓</span>}
         </div>
         <div className={`wk-todo-card__title${isClosed ? ' wk-todo-card__title--closed' : ''}`}>
-          {todo.title}
+          {todo.title.replace(/@\[([^:]+):([^\]]+)\]/g, (_m, _uid, name) => `@${name}`)}
         </div>
         {deadlineInfo && (
           <div className={`wk-todo-card__deadline ${deadlineInfo.className}`.trim()}>

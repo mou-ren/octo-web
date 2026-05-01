@@ -1,193 +1,134 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { WKApp } from '@octo/base';
-import * as api from '../../api/todoApi';
-import type { Todo, TodoStatus } from '../../bridge/types';
+import React, { useState, useCallback } from 'react';
+import type { Todo } from '../../bridge/types';
+import { useTodoList } from '../../hooks/useTodoList';
 import TodoCard from '../../ui/TodoCard';
-import { Toast } from '../../utils/toast';
+import DetailPanel from '../../ui/DetailPanel';
+import QuickAddBar from '../../ui/QuickAddBar';
 import './index.css';
-
-const STATUS_ORDER: TodoStatus[] = ['open', 'closed'];
-const STATUS_LABELS: Record<TodoStatus, string> = {
-  open: 'Open',
-  closed: 'Closed',
-};
 
 export interface ChatTodoPanelProps {
   channelId: string;
   channelType: number;
   channelName?: string;
   onClose: () => void;
-  onTodoClick?: (todoId: string) => void;
 }
 
+type Tab = 'open' | 'closed';
+
 /**
- * ChatTodoPanel — side panel embedded in chat window.
- * Queries todos by source_channel_id/type and groups by status.
- * Supports quick-create with auto-bound source context.
- * Uses 30s polling for refresh (v1).
+ * ChatTodoPanel — 频道侧边任务面板（M4 重构）
+ * - 两个 Tab：待处理 / 已完成
+ * - 点击卡片展开 DetailPanel（原地替换列表）
+ * - 底部 QuickAddBar：Enter 乐观创建，⊕ 展开完整 Modal
  */
 export default function ChatTodoPanel({
   channelId,
   channelType,
   channelName,
   onClose,
-  onTodoClick,
 }: ChatTodoPanelProps) {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [quickTitle, setQuickTitle] = useState('');
-  const [creating, setCreating] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('open');
+  const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
 
-  const handleTodoClick = useCallback((todoId: string) => {
-    if (onTodoClick) {
-      onTodoClick(todoId);
-    } else {
-      // Default: navigate to todo module
-      WKApp.route.push('/todo');
-    }
-  }, [onTodoClick]);
-
-  const loadTodos = useCallback(async () => {
-    try {
-      const result = await api.listTodos({
-        source_channel_id: channelId,
-        source_channel_type: channelType,
-        limit: 100,
-      });
-      setTodos(result.data);
-    } catch (e) {
-      Toast.error('Failed to load todos');
-    } finally {
-      setLoading(false);
-    }
-  }, [channelId, channelType]);
-
-  // Initial load + 30s polling (pauses when tab is hidden)
-  // Single effect owns both interval and visibility listener to prevent
-  // orphaned intervals from dual-effect race. (#1042 review round 7)
-  useEffect(() => {
-    // Explicitly clear any prior interval to prevent stale closure overlap
-    // when loadTodos identity changes without unmount.
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-
-    loadTodos();
-    pollRef.current = setInterval(loadTodos, 30000);
-
-    const handleVisibility = () => {
-      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-      if (!document.hidden) {
-        loadTodos();
-        pollRef.current = setInterval(loadTodos, 30000);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [loadTodos]);
-
-  // Group by status
-  const grouped = STATUS_ORDER.reduce<Record<string, Todo[]>>((acc, status) => {
-    const items = todos.filter((t: Todo) => t.status === status);
-    if (items.length > 0) {
-      acc[status] = items;
-    }
-    return acc;
-  }, {});
-
-  const handleQuickCreate = useCallback(async () => {
-    if (!quickTitle.trim() || creating) return;
-    setCreating(true);
-    try {
-      await api.createTodo({
-        title: quickTitle.trim(),
-        source_channel_id: channelId,
-        source_channel_type: channelType,
-        source_name: channelName,
-      });
-      setQuickTitle('');
-      await loadTodos();
-    } catch (e) {
-      Toast.error('Failed to create todo');
-    } finally {
-      setCreating(false);
-    }
-  }, [quickTitle, creating, channelId, channelType, channelName, loadTodos]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleQuickCreate();
-      }
+  const { todos, loading, reload, toggleStatus, addOptimistic, removeOptimistic } = useTodoList({
+    initialFilters: {
+      source_channel_id: channelId,
+      source_channel_type: channelType,
     },
-    [handleQuickCreate],
-  );
+    pageSize: 100,
+  });
+
+  const openTodos = todos.filter((t) => t.status === 'open');
+  const closedTodos = todos.filter((t) => t.status === 'closed');
+  const displayTodos = activeTab === 'open' ? openTodos : closedTodos;
+
+  const handleQuickCreated = useCallback((todo: Todo) => {
+    if (todo.id.startsWith('__rollback__')) {
+      // 回滚：移除乐观条目，reload 拿真实数据
+      removeOptimistic(todo.id.replace('__rollback__', '__optimistic__'));
+      reload();
+      return;
+    }
+    if (todo.id.startsWith('__optimistic__')) {
+      // 乐观插入：立即显示在列表顶部
+      addOptimistic(todo);
+      return;
+    }
+    // 真实数据回来：移除所有乐观条目（每次只有一个），reload 拿真实列表
+    removeOptimistic('__optimistic__');
+    reload();
+  }, [reload, addOptimistic, removeOptimistic]);
+
+  const channel = { channelId, channelType, name: channelName };
 
   return (
     <div className="wk-todo-chat-panel">
-      {/* Header */}
-      <div className="wk-todo-chat-panel__header">
-        <div>
-          <span className="wk-todo-chat-panel__title">Todos</span>
-          <span className="wk-todo-chat-panel__count">({todos.length})</span>
+      {/* Header — 详情页时隐藏，由 DetailPanel 自己的 header 接管 */}
+      {!selectedTodoId && (
+        <div className="wk-todo-chat-panel__header">
+          <span className="wk-todo-chat-panel__title">任务</span>
+          <button type="button" className="wk-todo-chat-panel__close" onClick={onClose}>✕</button>
         </div>
-        <button type="button" className="wk-todo-chat-panel__close" onClick={onClose}>
-          ✕
+      )}
+
+      {/* Tabs — 详情页时隐藏 */}
+      <div className="wk-todo-chat-panel__tabs" style={selectedTodoId ? { display: 'none' } : undefined}>
+        <button
+          type="button"
+          className={`wk-todo-chat-panel__tab${activeTab === 'open' ? ' wk-todo-chat-panel__tab--active' : ''}`}
+          onClick={() => { setActiveTab('open'); setSelectedTodoId(null); }}
+        >
+          待处理 <span className="wk-todo-chat-panel__tab-count">{openTodos.length}</span>
+        </button>
+        <button
+          type="button"
+          className={`wk-todo-chat-panel__tab${activeTab === 'closed' ? ' wk-todo-chat-panel__tab--active' : ''}`}
+          onClick={() => { setActiveTab('closed'); setSelectedTodoId(null); }}
+        >
+          已完成 <span className="wk-todo-chat-panel__tab-count">{closedTodos.length}</span>
         </button>
       </div>
 
-      {/* Body */}
+      {/* Body: list or detail */}
       <div className="wk-todo-chat-panel__body">
-        {loading && (
-          <div className="wk-todo-chat-panel__empty">Loading...</div>
-        )}
-        {!loading && todos.length === 0 && (
-          <div className="wk-todo-chat-panel__empty">No todos in this channel</div>
-        )}
-        {!loading &&
-          STATUS_ORDER.map((status) => {
-            const items = grouped[status];
-            if (!items) return null;
-            return (
-              <div key={status} className="wk-todo-chat-panel__section">
-                <div className="wk-todo-chat-panel__section-title">
-                  {STATUS_LABELS[status]} ({items.length})
-                </div>
-                {items.map((todo) => (
-                  <div key={todo.id} style={{ marginBottom: 'var(--wk-sp-1, 4px)' }}>
-                    <TodoCard todo={todo} onClick={handleTodoClick} />
-                  </div>
-                ))}
+        {selectedTodoId ? (
+          <DetailPanel
+            todoId={selectedTodoId}
+            channel={channel}
+            onClose={() => setSelectedTodoId(null)}
+            onStatusChanged={reload}
+            showBack
+          />
+        ) : (
+          <>
+            {loading && <div className="wk-todo-chat-panel__empty">加载中...</div>}
+            {!loading && displayTodos.length === 0 && (
+              <div className="wk-todo-chat-panel__empty">
+                {activeTab === 'open' ? '暂无待处理任务' : '暂无已完成任务'}
               </div>
-            );
-          })}
+            )}
+            {!loading && displayTodos.map((todo) => (
+              <div key={todo.id} style={{ marginBottom: 'var(--wk-sp-1, 4px)' }}>
+                <TodoCard
+                  todo={todo}
+                  assigneeUids={[]}
+                  hideProject
+                  onClick={(id) => setSelectedTodoId(id)}
+                  onStatusChange={(id) => toggleStatus(id, todo.status)}
+                />
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
-      {/* Quick create footer */}
-      <div className="wk-todo-chat-panel__footer">
-        <div className="wk-todo-chat-panel__quick-create">
-          <input
-            className="wk-todo-chat-panel__quick-input"
-            type="text"
-            placeholder="Quick create todo..."
-            value={quickTitle}
-            onChange={(e) => setQuickTitle(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <button
-            type="button"
-            className="wk-todo-chat-panel__quick-btn"
-            onClick={handleQuickCreate}
-            disabled={creating || !quickTitle.trim()}
-          >
-            Add
-          </button>
-        </div>
-      </div>
+      {/* Quick add footer */}
+      <QuickAddBar
+        channelId={channelId}
+        channelType={channelType}
+        channelName={channelName}
+        onCreated={handleQuickCreated}
+      />
     </div>
   );
 }

@@ -1,516 +1,274 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { WKApp, isSafeUrl } from '@octo/base';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { WKApp } from '@octo/base';
 import * as api from '../api/todoApi';
-import type { Todo, TodoDetail, Goal, GoalStatus, TodoStatus, TodoListParams, TodoComment, TodoAttachment, CreateGoalReq } from '../bridge/types';
+import type { Goal, GoalStatus, CreateGoalReq, Todo, TodoListParams } from '../bridge/types';
+import { useTodoList } from '../hooks/useTodoList';
+import { useGoalList } from '../hooks/useGoalList';
 import TodoCard from '../ui/TodoCard';
-import TodoStatusBadge from '../ui/TodoStatusBadge';
 import TodoFilterBar from '../ui/TodoFilterBar';
-import AssigneeEditor from '../ui/AssigneeEditor';
-import UserName from '../ui/UserName';
+import DetailPanel from '../ui/DetailPanel';
+import CreateTaskModal from '../ui/CreateTaskModal';
 import { Toast } from '../utils/toast';
-
 import './TodoPage.css';
 
-// ─── Detail Side Panel ──────────────────────────────────
+// ─── 时间分组 ────────────────────────────────────────────
 
-function DetailSidePanel({ todoId, onClose, onStatusChanged }: { todoId: string; onClose: () => void; onStatusChanged?: () => void }) {
-  const [todo, setTodo] = useState<TodoDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [comments, setComments] = useState<TodoComment[]>([]);
-  const [attachments, setAttachments] = useState<TodoAttachment[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [showAttachForm, setShowAttachForm] = useState(false);
-  const [attachUrl, setAttachUrl] = useState('');
-  const [attachName, setAttachName] = useState('');
-  const [attachSubmitting, setAttachSubmitting] = useState(false);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [updatingGoal, setUpdatingGoal] = useState(false);
-  const updatingGoalRef = useRef(false);
+type TimeGroup = 'overdue' | 'today' | 'week' | 'later' | 'no-deadline' | 'done';
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [t, c, a, g] = await Promise.all([
-        api.getTodo(todoId),
-        api.listComments(todoId),
-        api.listAttachments(todoId),
-        api.listGoals(),
-      ]);
-      setTodo(t);
-      setComments(Array.isArray(c) ? c : []);
-      setAttachments(Array.isArray(a) ? a : []);
-      setGoals(Array.isArray(g) ? g : []);
-    } catch (e) { Toast.error('Failed to load todo'); }
-    finally { setLoading(false); }
-  }, [todoId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleToggleStatus = useCallback(async () => {
-    if (!todo) return;
-    const newStatus: TodoStatus = todo.status === 'open' ? 'closed' : 'open';
-    try {
-      await api.transitionTodo(todo.id, newStatus);
-      await load();
-      onStatusChanged?.();
-    } catch (e) { Toast.error('Failed to update status'); }
-  }, [todo, load, onStatusChanged]);
-
-  const handleAddComment = useCallback(async () => {
-    if (!newComment.trim() || submitting) return;
-    setSubmitting(true);
-    try {
-      await api.addComment(todoId, newComment.trim());
-      setNewComment('');
-      const c = await api.listComments(todoId);
-      setComments(Array.isArray(c) ? c : []);
-    } catch (e) { Toast.error('Failed to add comment'); }
-    finally { setSubmitting(false); }
-  }, [todoId, newComment, submitting]);
-
-  const handleDeleteComment = useCallback(async (commentId: string) => {
-    if (!window.confirm('Delete this comment?')) return;
-    try {
-      await api.deleteComment(todoId, commentId);
-      setComments(prev => prev.filter(c => c.id !== commentId));
-    } catch (e) { Toast.error('Failed to delete comment'); }
-  }, [todoId]);
-
-  const handleAddAttachment = useCallback(async () => {
-    if (!attachUrl.trim() || attachSubmitting) return;
-    if (!isSafeUrl(attachUrl.trim())) {
-      Toast.error('Invalid URL — only http/https links are allowed');
-      return;
-    }
-    setAttachSubmitting(true);
-    try {
-      await api.createAttachment(todoId, attachUrl.trim(), attachName.trim() || undefined);
-      setAttachUrl('');
-      setAttachName('');
-      setShowAttachForm(false);
-      const a = await api.listAttachments(todoId);
-      setAttachments(Array.isArray(a) ? a : []);
-    } catch (e) { Toast.error('Failed to add attachment'); }
-    finally { setAttachSubmitting(false); }
-  }, [todoId, attachUrl, attachName, attachSubmitting]);
-
-  const handleDeleteAttachment = useCallback(async (attachmentId: string) => {
-    if (!window.confirm('Delete this attachment?')) return;
-    try {
-      await api.deleteAttachment(todoId, attachmentId);
-      setAttachments(prev => prev.filter(a => a.id !== attachmentId));
-    } catch (e) { Toast.error('Failed to delete attachment'); }
-  }, [todoId]);
-
-  const handleGoalChange = useCallback(async (goalId: string) => {
-    if (updatingGoalRef.current) return;
-    updatingGoalRef.current = true;
-    setUpdatingGoal(true);
-    try {
-      // Only send goal_id — avoid overwriting title with potentially stale closure value.
-      // Use todoId (from props) instead of todo.id to avoid stale closure on `todo`.
-      const updated = await api.updateTodo(todoId, {
-        goal_id: goalId || null,
-      });
-      setTodo(updated);
-      onStatusChanged?.();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      Toast.error(`Failed to update goal: ${msg}`);
-    }
-    finally {
-      updatingGoalRef.current = false;
-      setUpdatingGoal(false);
-    }
-  }, [todoId, onStatusChanged]);
-
-  return (
-    <div className="wk-todo-side-panel">
-      <div className="wk-todo-side-panel__header">
-        <span className="wk-todo-side-panel__header-title">Detail</span>
-        <button type="button" className="wk-todo-side-panel__close" onClick={onClose}>✕</button>
-      </div>
-      <div className="wk-todo-side-panel__body">
-        {loading && <div className="wk-todo-list__loading">Loading...</div>}
-        {!loading && !todo && <div className="wk-todo-list__empty">Failed to load</div>}
-        {!loading && todo && (
-          <>
-            <h2 className="wk-todo-detail__title">{todo.title}</h2>
-            <div className="wk-todo-detail__status" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <TodoStatusBadge status={todo.status} />
-              <button type="button" className="wk-todo-detail__action-btn" onClick={handleToggleStatus}>
-                {todo.status === 'open' ? '✕ Close' : '↺ Reopen'}
-              </button>
-            </div>
-            {todo.description && <div className="wk-todo-detail__desc">{todo.description}</div>}
-            <div className="wk-todo-detail__meta">
-              <AssigneeEditor
-                todoId={todo.id}
-                assignees={todo.assignees ?? []}
-                onChanged={load}
-              />
-              <div style={{ marginBottom: '4px' }}>
-                <div style={{ fontSize: '14px', color: 'var(--wk-text-primary, #1a1a1a)', marginBottom: '8px' }}>
-                  <strong style={{ fontWeight: 500 }}>Goal</strong>
-                </div>
-                <select
-                  value={todo.goal_id || ''}
-                  onChange={(e) => handleGoalChange(e.target.value)}
-                  disabled={updatingGoal}
-                  style={{
-                    width: '100%', padding: '6px 10px',
-                    border: '1px solid var(--wk-border-default, #e5e5e5)',
-                    borderRadius: '6px', fontSize: '13px',
-                    background: 'var(--wk-bg-surface, #fff)',
-                    color: 'var(--wk-text-primary, #1a1a1a)',
-                    outline: 'none', cursor: 'pointer',
-                    opacity: updatingGoal ? 0.5 : 1,
-                  }}
-                >
-                  <option value="">No goal</option>
-                  {goals.map(g => (
-                    <option key={g.id} value={g.id}>{g.title}</option>
-                  ))}
-                </select>
-              </div>
-              {todo.deadline && <div><strong>Deadline:</strong> {new Date(todo.deadline).toLocaleDateString()}</div>}
-              {todo.source_name && <div><strong>Source:</strong> {todo.source_name}</div>}
-              <div className="wk-todo-detail__timestamps">
-                Created: {new Date(todo.created_at).toLocaleString()} · Updated: {new Date(todo.updated_at).toLocaleString()}
-              </div>
-            </div>
-
-            {/* Attachments */}
-            <div style={{ marginTop: '20px', borderTop: '1px solid var(--wk-border-default, #f0f0f0)', paddingTop: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: '13px', color: 'var(--wk-text-primary, #1a1a1a)' }}>Attachments ({attachments.length})</strong>
-                {!showAttachForm && (
-                  <button type="button" onClick={() => setShowAttachForm(true)} style={{
-                    border: 'none', background: 'none', color: 'var(--wk-brand-primary, #7C5CFC)',
-                    cursor: 'pointer', fontSize: '12px', fontWeight: 500,
-                  }}>+ Add</button>
-                )}
-              </div>
-              {showAttachForm && (
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <input type="text" placeholder="File URL (required)" value={attachUrl}
-                    onChange={(e) => setAttachUrl(e.target.value)}
-                    style={{ padding: '6px 10px', border: '1px solid var(--wk-border-default, #e5e5e5)', borderRadius: '6px', fontSize: '12px', outline: 'none' }} />
-                  <input type="text" placeholder="File name (optional)" value={attachName}
-                    onChange={(e) => setAttachName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddAttachment(); }}
-                    style={{ padding: '6px 10px', border: '1px solid var(--wk-border-default, #e5e5e5)', borderRadius: '6px', fontSize: '12px', outline: 'none' }} />
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button type="button" onClick={handleAddAttachment} disabled={!attachUrl.trim() || attachSubmitting}
-                      style={{ padding: '5px 12px', border: 'none', borderRadius: '4px', background: 'var(--wk-brand-primary, #7C5CFC)', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 500, opacity: (!attachUrl.trim() || attachSubmitting) ? 0.5 : 1 }}>
-                      {attachSubmitting ? '...' : 'Add'}
-                    </button>
-                    <button type="button" onClick={() => { setShowAttachForm(false); setAttachUrl(''); setAttachName(''); }}
-                      style={{ padding: '5px 12px', border: 'none', borderRadius: '4px', background: 'transparent', color: 'var(--wk-text-tertiary, #999)', cursor: 'pointer', fontSize: '12px' }}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {attachments.map(a => (
-                  <div key={a.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '6px 10px', background: 'var(--wk-bg-base, #f7f8fa)', borderRadius: '6px', fontSize: '13px',
-                  }}>
-                    <a href={isSafeUrl(a.file_url) ? a.file_url : '#'} target="_blank" rel="noopener noreferrer"
-                      style={{ color: 'var(--wk-brand-primary, #7C5CFC)', textDecoration: 'none', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      📎 {a.file_name || 'Attachment'}
-                      {a.file_size ? ` (${(a.file_size / 1024).toFixed(1)} KB)` : ''}
-                    </a>
-                    <button type="button" onClick={() => handleDeleteAttachment(a.id)}
-                      style={{ border: 'none', background: 'none', color: 'var(--wk-text-disabled, #ccc)', cursor: 'pointer', fontSize: '11px', padding: '0 2px', transition: 'color 150ms' }}>
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {attachments.length === 0 && !showAttachForm && (
-                  <div style={{ color: 'var(--wk-text-disabled, #bbb)', fontSize: '13px', padding: '4px 0' }}>No attachments</div>
-                )}
-              </div>
-            </div>
-
-            {/* Comments */}
-            <div style={{ marginTop: '20px', borderTop: '1px solid var(--wk-border-default, #f0f0f0)', paddingTop: '14px' }}>
-              <strong style={{ fontSize: '13px', color: 'var(--wk-text-primary, #1a1a1a)' }}>Comments ({comments.length})</strong>
-              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {comments.map(c => (
-                  <div key={c.id} style={{ padding: '10px 12px', background: 'var(--wk-bg-base, #f7f8fa)', borderRadius: '8px', fontSize: '13px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--wk-text-primary, #1a1a1a)', fontSize: '12px' }}><UserName uid={c.user_id} /></span>
-                      <span style={{ fontSize: '11px', color: 'var(--wk-text-tertiary, #999)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {new Date(c.created_at).toLocaleString()}
-                        {c.user_id === WKApp.loginInfo.uid && (
-                        <button type="button" onClick={() => handleDeleteComment(c.id)}
-                          style={{
-                            border: 'none', background: 'none', color: 'var(--wk-text-disabled, #ccc)',
-                            cursor: 'pointer', fontSize: '11px', padding: '0 2px',
-                            transition: 'color 150ms',
-                          }}>
-                          ✕
-                        </button>
-                        )}
-                      </span>
-                    </div>
-                    <div style={{ color: 'var(--wk-text-secondary, #555)', lineHeight: '1.5' }}>{c.content}</div>
-                  </div>
-                ))}
-                {comments.length === 0 && (
-                  <div style={{ color: 'var(--wk-text-disabled, #bbb)', fontSize: '13px', padding: '8px 0' }}>No comments yet</div>
-                )}
-              </div>
-              {/* Add comment */}
-              <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder="Add a comment..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                  style={{
-                    flex: 1, padding: '8px 12px', border: '1px solid var(--wk-border-default, #e5e5e5)',
-                    borderRadius: '6px', fontSize: '13px', outline: 'none',
-                    transition: 'border-color 150ms',
-                  }}
-                />
-                <button type="button" onClick={handleAddComment} disabled={!newComment.trim() || submitting}
-                  style={{
-                    padding: '8px 14px', border: 'none',
-                    borderRadius: '6px', background: 'var(--wk-brand-primary, #7C5CFC)',
-                    color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 500,
-                    opacity: (!newComment.trim() || submitting) ? 0.5 : 1,
-                    transition: 'opacity 150ms',
-                  }}>
-                  Send
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
+interface GroupedTodos {
+  overdue: Todo[];
+  today: Todo[];
+  week: Todo[];
+  later: Todo[];
+  noDeadline: Todo[];
+  done: Todo[];
 }
 
-// ─── Todo List View (used for both All Todos and Goal Todos) ─────
+function groupByTime(todos: Todo[]): GroupedTodos {
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+  const weekEnd = new Date(todayStart); weekEnd.setDate(weekEnd.getDate() + 7);
 
-function TodoListView({ title, goalId, prefillTodo, onGoalsRefresh }: { title: string; goalId?: string; prefillTodo?: { title: string; source_channel_id: string; source_channel_type: number }; onGoalsRefresh?: () => void }) {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<TodoListParams>({});
-  const [hasMore, setHasMore] = useState(false);
-  const [cursor, setCursor] = useState<string | undefined>();
-  const cursorRef = useRef<string | undefined>();
-  const [showCreateDialog, setShowCreateDialog] = useState(!!prefillTodo);
+  const result: GroupedTodos = { overdue: [], today: [], week: [], later: [], noDeadline: [], done: [] };
+
+  for (const todo of todos) {
+    if (todo.status === 'closed') {
+      result.done.push(todo);
+      continue;
+    }
+    if (!todo.deadline) {
+      result.noDeadline.push(todo);
+      continue;
+    }
+    const dl = new Date(todo.deadline);
+    dl.setHours(0, 0, 0, 0);
+    if (dl < todayStart) {
+      result.overdue.push(todo);
+    } else if (dl <= todayEnd) {
+      result.today.push(todo);
+    } else if (dl <= weekEnd) {
+      result.week.push(todo);
+    } else {
+      result.later.push(todo);
+    }
+  }
+  return result;
+}
+
+// ─── 导航视图类型 ────────────────────────────────────────
+
+type NavView = 'mine' | 'created' | 'all' | string; // string = goalId
+
+// 供 sidebar 的「新建任务」按钮调用当前 TodoListView 的 modal
+let _openCreateModal: (() => void) | null = null;
+
+// ─── Todo List View ─────────────────────────────────────
+
+interface TodoListViewProps {
+  navView: NavView;
+  goalTitle?: string;
+  onGoalsRefresh?: () => void;
+}
+
+const GROUP_CONFIG: Array<{ key: keyof GroupedTodos; label: string; icon: string }> = [
+  { key: 'overdue',    label: '已逾期',    icon: '⚠️' },
+  { key: 'today',      label: '今天到期',  icon: '📅' },
+  { key: 'week',       label: '本周',      icon: '📆' },
+  { key: 'later',      label: '之后',      icon: '🗓' },
+  { key: 'noDeadline', label: '无截止日期', icon: '•' },
+];
+
+function buildParams(navView: NavView, myUid: string): TodoListParams {
+  if (navView === 'mine') return { assignee_id: myUid };
+  if (navView === 'created') return { creator_id: myUid };
+  if (navView === 'all') return {};
+  return { goal_id: navView }; // goalId
+}
+
+function TodoListView({ navView, goalTitle, onGoalsRefresh }: TodoListViewProps) {
+  const myUid = WKApp.loginInfo.uid ?? '';
+  const initialFilters = useMemo(() => buildParams(navView, myUid), [navView, myUid]);
+
+  const { todos, loading, hasMore, filters, setFilters, reload, loadMore, toggleStatus } = useTodoList({ initialFilters });
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [doneExpanded, setDoneExpanded] = useState(false);
 
-  // Serialize filters to a stable string for useCallback deps.
-  // JSON.stringify produces an identical string across renders when `filters`
-  // state hasn't changed, so `load` only gets recreated on actual filter changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
-
-  const load = useCallback(async (append = false) => {
-    if (!append) setLoading(true);
-    try {
-      const params: TodoListParams = { ...filters, limit: 50 };
-      if (goalId) params.goal_id = goalId;
-      if (append && cursorRef.current) params.cursor = cursorRef.current;
-
-      const res = await api.listTodos(params);
-      setTodos(append ? (prev) => [...prev, ...res.data] : res.data);
-      setHasMore(res.pagination.has_more);
-      cursorRef.current = res.pagination.next_cursor;
-      setCursor(res.pagination.next_cursor);
-    } catch (e) { Toast.error('Failed to load todos'); }
-    finally { setLoading(false); }
-  }, [goalId, filtersKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reload when filters change. `load` is in deps so this fires when
-  // filtersKey changes (which recreates `load`). `filters` in deps is
-  // intentionally redundant for readability.
   useEffect(() => {
-    cursorRef.current = undefined;
-    setCursor(undefined);
-    load(false);
-  }, [load]); // goalId/filters changes cascade through `load` identity
-
-  const handleToggleStatus = useCallback(async (todoId: string, currentStatus: TodoStatus) => {
-    const newStatus: TodoStatus = currentStatus === 'open' ? 'closed' : 'open';
-    try {
-      await api.transitionTodo(todoId, newStatus);
-      // Update local state
-      setTodos(prev => prev.map(t => t.id === todoId ? { ...t, status: newStatus } : t));
-    } catch (e) { Toast.error('Failed to update status'); }
+    _openCreateModal = () => { setShowCreateModal(true); };
+    return () => { _openCreateModal = null; };
   }, []);
+
+  // navView 切换时重置选中
+  useEffect(() => {
+    setSelectedTodoId(null);
+  }, [navView]);
+
+  const grouped = useMemo(() => groupByTime(todos), [todos]);
+
+  const title = navView === 'mine' ? '我负责的'
+    : navView === 'created' ? '我发起的'
+    : navView === 'all' ? '全部任务'
+    : goalTitle ?? '项目任务';
+
+  const handleConfirmCreate = useCallback(async (req: Parameters<typeof api.createTodo>[0]) => {
+    await api.createTodo(req);
+    Toast.success('任务已创建');
+    setShowCreateModal(false);
+    reload();
+    onGoalsRefresh?.();
+  }, [reload, onGoalsRefresh]);
+
+  const renderGroup = (key: keyof GroupedTodos, label: string, icon: string) => {
+    const items = grouped[key];
+    if (items.length === 0) return null;
+    return (
+      <div key={key} className="wk-todo-group">
+        <div className="wk-todo-group__header">
+          <span className="wk-todo-group__icon">{icon}</span>
+          <span className="wk-todo-group__label">{label}</span>
+          <span className="wk-todo-group__count">{items.length}</span>
+        </div>
+        {items.map((todo) => (
+          <TodoCard
+            key={todo.id}
+            todo={todo}
+            selected={selectedTodoId === todo.id}
+            assigneeUids={[]}
+            channelName={todo.source_name}
+            hideProject={navView !== 'all' && navView !== 'mine' && navView !== 'created'}
+            onClick={(id) => setSelectedTodoId(id)}
+            onStatusChange={(id) => toggleStatus(id, todo.status)}
+          />
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="wk-todo-list-view" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div className="wk-todo-list-view__header">
         <span className="wk-todo-list-view__title">{title}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <TodoFilterBar filters={filters} onFilterChange={(f) => setFilters(prev => ({ ...prev, ...f }))} />
-          <button
-            type="button"
-            onClick={() => setShowCreateDialog(true)}
-            style={{
-              padding: '6px 14px', border: 'none',
-              borderRadius: '6px', background: 'var(--wk-brand-primary, #7C5CFC)',
-              color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 500,
-              whiteSpace: 'nowrap', transition: 'opacity 150ms',
-              boxShadow: '0 1px 3px rgba(124, 92, 252, 0.3)',
-            }}
-          >
-            + New Todo
-          </button>
-        </div>
+        <TodoFilterBar filters={filters} onFilterChange={setFilters} searchOnly />
       </div>
 
-      {/* Content area: list + optional detail panel side by side */}
+      {/* Content: list + detail panel */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+          {loading && (
+            <div className="wk-todo-list__loading">加载中...</div>
+          )}
+          {!loading && todos.length === 0 && (
+            <div className="wk-todo-list__empty">暂无任务</div>
+          )}
 
-      {/* Todo list */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-        {loading && <div className="wk-todo-list__loading" style={{ textAlign: 'center', padding: '40px', color: 'var(--wk-text-tertiary, #999)' }}>Loading...</div>}
-        {!loading && todos.length === 0 && (
-          <div className="wk-todo-list__empty" style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--wk-text-disabled, #bbb)', fontSize: '14px' }}>
-            <div style={{ fontSize: '32px', marginBottom: '12px' }}>✅</div>
-            No todos{filters.status ? ` with status "${filters.status}"` : ''}
-          </div>
-        )}
-        {!loading && todos.map(todo => {
-          let isOverdue = false;
-          if (todo.deadline) {
-            const dl = new Date(todo.deadline);
-            dl.setHours(0, 0, 0, 0);
-            const now = new Date();
-            now.setHours(0, 0, 0, 0);
-            isOverdue = dl < now;
-          }
-          return (
-            <div
-              key={todo.id}
-              className={`wk-todo-list-view__item${selectedTodoId === todo.id ? ' wk-todo-list-view__item--selected' : ''}`}
-              onClick={() => setSelectedTodoId(todo.id)}
-            >
-              <button
-                type="button"
-                className={`wk-todo-checkbox${todo.status === 'closed' ? ' wk-todo-checkbox--closed' : ''}`}
-                onClick={(e) => { e.stopPropagation(); handleToggleStatus(todo.id, todo.status); }}
-                title={todo.status === 'open' ? 'Close' : 'Reopen'}
+          {/* 时间分组 */}
+          {!loading && GROUP_CONFIG.map(({ key, label, icon }) => renderGroup(key, label, icon))}
+
+          {/* 已完成（折叠） */}
+          {!loading && grouped.done.length > 0 && (
+            <div className="wk-todo-group">
+              <div
+                className="wk-todo-group__section-header"
+                onClick={() => setDoneExpanded((v) => !v)}
               >
-                {todo.status === 'closed' ? '✓' : ''}
-              </button>
-              <span className={`wk-todo-item-title${todo.status === 'closed' ? ' wk-todo-item-title--closed' : ''}`}>
-                {todo.title}
-              </span>
-              <div className="wk-todo-item-meta">
-                {todo.deadline && (
-                  <span className={`wk-todo-item-deadline${isOverdue && todo.status === 'open' ? ' wk-todo-item-deadline--overdue' : ''}`}>
-                    {new Date(todo.deadline).toLocaleDateString()}
-                  </span>
-                )}
-                <TodoStatusBadge status={todo.status} />
+                <svg
+                  width="10" height="10" viewBox="0 0 10 10"
+                  style={{ transform: doneExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 150ms', flexShrink: 0 }}
+                >
+                  <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span>已完成</span>
+                <span style={{ marginLeft: '4px', opacity: 0.5 }}>({grouped.done.length})</span>
               </div>
+              {doneExpanded && grouped.done.map((todo) => (
+                <TodoCard
+                  key={todo.id}
+                  todo={todo}
+                  selected={selectedTodoId === todo.id}
+                  assigneeUids={[]}
+                  channelName={todo.source_name}
+                  hideProject={navView !== 'all' && navView !== 'mine' && navView !== 'created'}
+                  onClick={(id) => setSelectedTodoId(id)}
+                  onStatusChange={(id) => toggleStatus(id, todo.status)}
+                />
+              ))}
             </div>
-          );
-        })}
-        {!loading && hasMore && (
-          <button type="button" onClick={() => load(true)}
-            style={{
-              display: 'block', margin: '12px auto', padding: '8px 20px',
-              border: 'none',
-              borderRadius: '6px', background: 'var(--wk-brand-tint-06, rgba(124, 92, 252, 0.06))',
-              cursor: 'pointer', color: 'var(--wk-brand-primary, #7C5CFC)',
-              fontSize: '13px', fontWeight: 500,
-              transition: 'background 150ms',
-            }}>
-            Load more
-          </button>
+          )}
+
+          {!loading && hasMore && (
+            <button type="button" onClick={loadMore} className="wk-todo-load-more">
+              加载更多
+            </button>
+          )}
+        </div>
+
+        {/* Detail panel */}
+        {selectedTodoId && (
+          <DetailPanel
+            todoId={selectedTodoId}
+            onClose={() => setSelectedTodoId(null)}
+            onStatusChanged={() => { reload(); onGoalsRefresh?.(); }}
+          />
         )}
       </div>
 
-      {/* Detail side panel (right side) */}
-      {selectedTodoId && (
-        <DetailSidePanel
-          todoId={selectedTodoId}
-          onClose={() => setSelectedTodoId(null)}
-          onStatusChanged={() => { load(false); onGoalsRefresh?.(); }}
-        />
-      )}
-      </div>{/* end flex row */}
-
-      {/* Create todo dialog */}
-      {showCreateDialog && (
-        <NewTodoDialog
-          goalId={goalId}
-          prefillTitle={prefillTodo?.title}
-          prefillSource={prefillTodo ? { channel_id: prefillTodo.source_channel_id, channel_type: prefillTodo.source_channel_type } : undefined}
-          onClose={() => setShowCreateDialog(false)}
-          onCreated={() => { setShowCreateDialog(false); load(false); }}
-        />
-      )}
+      <CreateTaskModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onDirtyClose={() => setShowCreateModal(false)}
+        onConfirm={handleConfirmCreate}
+      />
     </div>
   );
 }
 
-// ─── New Todo Dialog ─────────────────────────────────
+// ─── Goal Status Badge ──────────────────────────────────
 
-function NewTodoDialog({ goalId, prefillTitle, prefillSource, onClose, onCreated }: {
-  goalId?: string;
-  prefillTitle?: string;
-  prefillSource?: { channel_id: string; channel_type: number };
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [title, setTitle] = useState(prefillTitle || '');
-  const [desc, setDesc] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  const handleCreate = useCallback(async () => {
-    if (!title.trim() || creating) return;
-    setCreating(true);
-    try {
-      await api.createTodo({
-        title: title.trim(),
-        description: desc.trim() || undefined,
-        goal_id: goalId,
-        source_channel_id: prefillSource?.channel_id,
-        source_channel_type: prefillSource?.channel_type,
-      });
-      onCreated();
-    } catch (e) { Toast.error('Failed to create todo'); }
-    finally { setCreating(false); }
-  }, [title, desc, creating, goalId, prefillSource, onCreated]);
-
+function GoalStatusBadge({ status }: { status: GoalStatus }) {
+  const config: Record<GoalStatus, { label: string; color: string; bg: string; icon: string }> = {
+    active:    { label: '进行中', color: '#16a34a', bg: 'rgba(22, 163, 74, 0.08)',   icon: '●' },
+    completed: { label: '已完成', color: '#2563eb', bg: 'rgba(37, 99, 235, 0.08)',   icon: '✓' },
+    archived:  { label: '已归档', color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.08)', icon: '○' },
+  };
+  const resolved = config[status] || config.active;
   return (
-    <div className="wk-todo-dialog-overlay" onClick={onClose}>
-      <div className="wk-todo-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="wk-todo-dialog__title">New Todo</div>
-        <input className="wk-todo-dialog__input" type="text" placeholder="Todo title..."
-          value={title} onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleCreate(); }} autoFocus />
-        <textarea
-          className="wk-todo-dialog__input"
-          placeholder="Description (optional)"
-          value={desc} onChange={(e) => setDesc(e.target.value)}
-          rows={3}
-          style={{ resize: 'vertical' }}
-        />
-        <div className="wk-todo-dialog__actions">
-          <button type="button" className="wk-todo-dialog__btn wk-todo-dialog__btn--cancel" onClick={onClose}>Cancel</button>
-          <button type="button" className="wk-todo-dialog__btn wk-todo-dialog__btn--create"
-            onClick={handleCreate} disabled={!title.trim() || creating}>
-            {creating ? 'Creating...' : 'Create'}
-          </button>
-        </div>
+    <span className="wk-goal-status-badge" style={{ color: resolved.color, background: resolved.bg }}>
+      <span style={{ fontSize: '8px', lineHeight: 1 }}>{resolved.icon}</span> {resolved.label}
+    </span>
+  );
+}
+
+// ─── Goal Card ──────────────────────────────────────────
+
+function GoalCard({ goal, selected, onClick }: { goal: Goal; selected: boolean; onClick: () => void }) {
+  const totalTodos = goal.open_count + goal.closed_count;
+  let isOverdue = false;
+  let deadlineDisplay = '';
+  if (goal.deadline) {
+    const d = new Date(goal.deadline); d.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    isOverdue = goal.status === 'active' && d < today;
+    deadlineDisplay = d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+  }
+  return (
+    <div className={`wk-goal-card${selected ? ' wk-goal-card--selected' : ''}`} onClick={onClick}>
+      <div className="wk-goal-card__header">
+        <span className="wk-goal-card__title">{goal.title}</span>
+        <GoalStatusBadge status={goal.status} />
+      </div>
+      <div className="wk-goal-card__meta">
+        {totalTodos > 0
+          ? <span className="wk-goal-card__stats">{goal.open_count} 进行中 · {goal.closed_count} 已关闭</span>
+          : <span className="wk-goal-card__stats">暂无任务</span>}
+        {goal.deadline && (
+          <span className={`wk-goal-card__deadline${isOverdue ? ' wk-goal-card__deadline--overdue' : ''}`}>
+            {isOverdue ? '⚠ ' : ''}{deadlineDisplay}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -528,30 +286,30 @@ function NewGoalDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
     setCreating(true);
     try {
       const req: CreateGoalReq = { title: title.trim() };
-      if (deadline) req.deadline = new Date(deadline).toISOString();
+      if (deadline) req.deadline = new Date(`${deadline}T00:00:00`).toISOString();
       onCreated(await api.createGoal(req));
-    } catch (e) { Toast.error('Failed to create goal'); }
+    } catch { Toast.error('创建目标失败'); }
     finally { setCreating(false); }
   }, [title, deadline, creating, onCreated]);
 
   return (
     <div className="wk-todo-dialog-overlay" onClick={onClose}>
       <div className="wk-todo-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="wk-todo-dialog__title">New Goal</div>
-        <input className="wk-todo-dialog__input" type="text" placeholder="Goal title..."
+        <div className="wk-todo-dialog__title">新建目标</div>
+        <input className="wk-todo-dialog__input" type="text" placeholder="目标名称..."
           value={title} onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleCreate(); }} autoFocus />
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }} autoFocus />
         <div style={{ marginTop: '8px' }}>
-          <label className="wk-todo-dialog__label">Deadline (optional)</label>
+          <label className="wk-todo-dialog__label">截止日期（可选）</label>
           <input className="wk-todo-dialog__input" type="date" value={deadline}
             min={new Date().toISOString().split('T')[0]}
             onChange={(e) => setDeadline(e.target.value)} />
         </div>
         <div className="wk-todo-dialog__actions">
-          <button type="button" className="wk-todo-dialog__btn wk-todo-dialog__btn--cancel" onClick={onClose}>Cancel</button>
+          <button type="button" className="wk-todo-dialog__btn wk-todo-dialog__btn--cancel" onClick={onClose}>取消</button>
           <button type="button" className="wk-todo-dialog__btn wk-todo-dialog__btn--create"
             onClick={handleCreate} disabled={!title.trim() || creating}>
-            {creating ? 'Creating...' : 'Create'}
+            {creating ? '创建中...' : '创建'}
           </button>
         </div>
       </div>
@@ -561,11 +319,21 @@ function NewGoalDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
 
 // ─── Sidebar Icons ──────────────────────────────────────
 
-function ListIcon() {
+function NavIcon({ type }: { type: 'mine' | 'created' | 'all' }) {
+  if (type === 'mine') return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    </svg>
+  );
+  if (type === 'created') return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  );
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
     </svg>
   );
 }
@@ -573,156 +341,107 @@ function ListIcon() {
 function PlusIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
     </svg>
   );
 }
 
-// ─── Goal Status Badge ──────────────────────────────────
+// ─── TodoPage (Main Export) ─────────────────────────────
 
-function GoalStatusBadge({ status }: { status: GoalStatus }) {
-  const config: Record<GoalStatus, { label: string; color: string; bg: string; icon: string }> = {
-    active: { label: 'Active', color: '#16a34a', bg: 'rgba(22, 163, 74, 0.08)', icon: '●' },
-    completed: { label: 'Completed', color: '#2563eb', bg: 'rgba(37, 99, 235, 0.08)', icon: '✓' },
-    archived: { label: 'Archived', color: '#9ca3af', bg: 'rgba(156, 163, 175, 0.08)', icon: '○' },
-  };
-  const c = config[status];
-  if (!c) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn(`GoalStatusBadge: unknown status "${status}", falling back to active`);
-    }
-  }
-  const resolved = c || config.active;
-  return (
-    <span className="wk-goal-status-badge" style={{ color: resolved.color, background: resolved.bg }}>
-      <span style={{ fontSize: '8px', lineHeight: 1 }}>{resolved.icon}</span> {resolved.label}
-    </span>
-  );
-}
-
-// ─── Goal Card ──────────────────────────────────────────
-
-function GoalCard({ goal, selected, onClick }: { goal: Goal; selected: boolean; onClick: () => void }) {
-  const totalTodos = goal.open_count + goal.closed_count;
-
-  // Normalize to date-only comparison to avoid UTC+N timezone drift.
-  // e.g. "2026-04-28" parsed as UTC 00:00 would be "overdue" in UTC+8 before 08:00.
-  let isOverdue = false;
-  let deadlineDisplay = '';
-  if (goal.deadline) {
-    const deadlineDate = new Date(goal.deadline);
-    deadlineDate.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    isOverdue = goal.status === 'active' && deadlineDate < today;
-    deadlineDisplay = deadlineDate.toLocaleDateString();
-  }
-
-  return (
-    <div
-      className={`wk-goal-card${selected ? ' wk-goal-card--selected' : ''}`}
-      onClick={onClick}
-    >
-      <div className="wk-goal-card__header">
-        <span className="wk-goal-card__title">{goal.title}</span>
-        <GoalStatusBadge status={goal.status} />
-      </div>
-      <div className="wk-goal-card__meta">
-        {totalTodos > 0 && (
-          <span className="wk-goal-card__stats">
-            {goal.open_count} open · {goal.closed_count} closed
-          </span>
-        )}
-        {totalTodos === 0 && (
-          <span className="wk-goal-card__stats">No todos</span>
-        )}
-        {goal.deadline && (
-          <span className={`wk-goal-card__deadline${isOverdue ? ' wk-goal-card__deadline--overdue' : ''}`}>
-            {isOverdue ? '⚠ ' : ''}{deadlineDisplay}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Left Sidebar (Main Export) ─────────────────────────
+const TOP_NAV: Array<{ id: NavView; label: string; icon: 'mine' | 'created' | 'all' }> = [
+  { id: 'mine',    label: '我负责的', icon: 'mine' },
+  { id: 'created', label: '我发起的', icon: 'created' },
+  { id: 'all',     label: '全部任务', icon: 'all' },
+];
 
 export default function TodoPage() {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [selectedId, setSelectedId] = useState<string>('__all__');
+  const { goals, reload: reloadGoals } = useGoalList();
+  const [selectedView, setSelectedView] = useState<NavView>('mine');
   const [showNewGoal, setShowNewGoal] = useState(false);
 
-  const loadGoals = useCallback(() => {
-    api.listGoals().then(setGoals).catch(() => Toast.error('Failed to load goals'));
-  }, []);
+  const navigate = useCallback((view: NavView, goalTitle?: string) => {
+    setSelectedView(view);
+    WKApp.routeRight.replaceToRoot(
+      // key={view} 保证切换视图时组件重新挂载，hook 内部 filters state 重置
+      <TodoListView key={view} navView={view} goalTitle={goalTitle} onGoalsRefresh={reloadGoals} />
+    );
+  }, [reloadGoals]);
 
+  // 初始化
   useEffect(() => {
-    loadGoals();
-    WKApp.routeRight.replaceToRoot(<TodoListView title="All Todos" onGoalsRefresh={loadGoals} />);
-  }, [loadGoals]); // loadGoals is stable ([] deps) so this runs once
+    navigate('mine');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // space 切换重置
   useEffect(() => {
     const handler = () => {
-      loadGoals();
-      setSelectedId('__all__');
-      WKApp.routeRight.replaceToRoot(<TodoListView title="All Todos" onGoalsRefresh={loadGoals} />);
+      reloadGoals();
+      navigate('mine');
     };
     WKApp.mittBus.on('space-changed', handler);
     return () => { WKApp.mittBus.off('space-changed', handler); };
-  }, [loadGoals]);
-
-  const handleAllTodosClick = useCallback(() => {
-    setSelectedId('__all__');
-    WKApp.routeRight.replaceToRoot(<TodoListView title="All Todos" onGoalsRefresh={loadGoals} />);
-  }, [loadGoals]);
-
-  const handleGoalClick = useCallback((goal: Goal) => {
-    setSelectedId(goal.id);
-    WKApp.routeRight.replaceToRoot(<TodoListView title={goal.title} goalId={goal.id} onGoalsRefresh={loadGoals} />);
-  }, [loadGoals]);
+  }, [reloadGoals, navigate]);
 
   const handleGoalCreated = useCallback((goal: Goal) => {
     setShowNewGoal(false);
-    loadGoals();
-    setSelectedId(goal.id);
-    WKApp.routeRight.replaceToRoot(<TodoListView title={goal.title} goalId={goal.id} onGoalsRefresh={loadGoals} />);
-  }, [loadGoals]);
+    reloadGoals();
+    navigate(goal.id, goal.title);
+  }, [reloadGoals, navigate]);
 
   return (
     <div className="wk-todo-sidebar">
-      <div
-        className={`wk-todo-sidebar__item${selectedId === '__all__' ? ' wk-todo-sidebar__item--selected' : ''}`}
-        onClick={handleAllTodosClick}
-        style={{ marginTop: 'var(--wk-sp-1, 4px)' }}
-      >
-        <div className="wk-todo-sidebar__item-icon"><ListIcon /></div>
-        <span className="wk-todo-sidebar__item-name">All Todos</span>
+      {/* 新建任务 */}
+      <div className="wk-todo-sidebar__create">
+        <button
+          type="button"
+          className="wk-todo-sidebar__create-btn"
+          onClick={() => _openCreateModal?.()}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新建任务
+        </button>
       </div>
 
+      {/* 顶部固定导航 */}
+      {TOP_NAV.map(({ id, label, icon }) => (
+        <div
+          key={id}
+          className={`wk-todo-sidebar__item${selectedView === id ? ' wk-todo-sidebar__item--selected' : ''}`}
+          onClick={() => navigate(id)}
+        >
+          <div className="wk-todo-sidebar__item-icon"><NavIcon type={icon} /></div>
+          <span className="wk-todo-sidebar__item-name">{label}</span>
+        </div>
+      ))}
+
+      {/* 项目分区 */}
       <div className="wk-todo-sidebar__section-header">
-        <span className="wk-todo-sidebar__section">Goals</span>
-        <button type="button" className="wk-todo-sidebar__add-btn" onClick={() => setShowNewGoal(true)} title="New Goal">
+        <span className="wk-todo-sidebar__section">项目</span>
+        <button type="button" className="wk-todo-sidebar__add-btn" onClick={() => setShowNewGoal(true)} title="新建项目">
           <PlusIcon />
         </button>
       </div>
 
       <div className="wk-todo-sidebar__list">
         {goals.length === 0 ? (
-          <div className="wk-todo-sidebar__empty">No goals yet</div>
+          <div className="wk-todo-sidebar__empty">暂无项目</div>
         ) : (
           goals.map((g) => (
             <GoalCard
               key={g.id}
               goal={g}
-              selected={selectedId === g.id}
-              onClick={() => handleGoalClick(g)}
+              selected={selectedView === g.id}
+              onClick={() => navigate(g.id, g.title)}
             />
           ))
         )}
       </div>
 
-      {showNewGoal && <NewGoalDialog onClose={() => setShowNewGoal(false)} onCreated={handleGoalCreated} />}
+      {showNewGoal && (
+        <NewGoalDialog onClose={() => setShowNewGoal(false)} onCreated={handleGoalCreated} />
+      )}
     </div>
   );
 }

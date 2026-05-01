@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { DatePicker } from '@douyinfe/semi-ui';
 import { WKApp, isSafeUrl } from '@octo/base';
 import { Channel } from 'wukongimjssdk';
 import * as api from '../../api/todoApi';
@@ -14,13 +15,15 @@ import './index.css';
 export interface DetailPanelProps {
   todoId: string;
   onClose?: () => void;
+  /** 关闭按钮显示为返回箭头（在 ChatTodoPanel 侧边详情页中使用） */
+  showBack?: boolean;
   onStatusChanged?: () => void;
   channel?: { channelId: string; channelType: number };
 }
 
 // ─── DetailPanel 主组件 ────────────────────────────────────
 
-export default function DetailPanel({ todoId, onClose, onStatusChanged, channel }: DetailPanelProps) {
+export default function DetailPanel({ todoId, onClose, onStatusChanged, channel, showBack }: DetailPanelProps) {
   const [todo, setTodo] = useState<TodoDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState<TodoComment[]>([]);
@@ -55,7 +58,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
       setAttachments(Array.isArray(a) ? a : []);
       setGoals(Array.isArray(g) ? g : []);
     } catch (e) {
-      Toast.error('Failed to load todo');
+      Toast.error('加载任务失败');
     } finally {
       setLoading(false);
     }
@@ -76,15 +79,19 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
   // ─── 切换任务状态 ──────────────────────────────────────
   const handleToggleStatus = useCallback(async () => {
     if (!todo) return;
-    const newStatus = todo.status === 'open' ? 'closed' : 'open';
+    const oldStatus = todo.status;
+    const newStatus = oldStatus === 'open' ? 'closed' : 'open';
+    // 乐观更新
+    setTodo((prev) => prev ? { ...prev, status: newStatus } : prev);
     try {
       await api.transitionTodo(todo.id, newStatus);
-      await load();
       onStatusChanged?.();
     } catch (e) {
-      Toast.error('Failed to update status');
+      // 回滚到旧状态
+      setTodo((prev) => prev ? { ...prev, status: oldStatus } : prev);
+      Toast.error('更新状态失败');
     }
-  }, [todo, load, onStatusChanged]);
+  }, [todo, onStatusChanged]);
 
   // ─── 开始编辑任务名 ────────────────────────────────────
   const handleStartEditTitle = useCallback(() => {
@@ -108,7 +115,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
       setIsEditingTitle(false);
       onStatusChanged?.();
     } catch (e) {
-      Toast.error('Failed to update title');
+      Toast.error('更新标题失败');
     } finally {
       setUpdatingTitle(false);
     }
@@ -124,7 +131,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
       const c = await api.listComments(todoId);
       setComments(Array.isArray(c) ? c : []);
     } catch (e) {
-      Toast.error('Failed to add comment');
+      Toast.error('添加评论失败');
     } finally {
       setSubmitting(false);
     }
@@ -138,7 +145,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
         await api.deleteComment(todoId, commentId);
         setComments((prev) => prev.filter((c) => c.id !== commentId));
       } catch (e) {
-        Toast.error('Failed to delete comment');
+        Toast.error('删除评论失败');
       }
     },
     [todoId]
@@ -148,7 +155,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
   const handleAddAttachment = useCallback(async () => {
     if (!attachUrl.trim() || attachSubmitting) return;
     if (!isSafeUrl(attachUrl.trim())) {
-      Toast.error('Invalid URL — only http/https links are allowed');
+      Toast.error('链接格式不正确，仅支持 http/https');
       return;
     }
     setAttachSubmitting(true);
@@ -160,7 +167,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
       const a = await api.listAttachments(todoId);
       setAttachments(Array.isArray(a) ? a : []);
     } catch (e) {
-      Toast.error('Failed to add attachment');
+      Toast.error('添加附件失败');
     } finally {
       setAttachSubmitting(false);
     }
@@ -174,7 +181,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
         await api.deleteAttachment(todoId, attachmentId);
         setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
       } catch (e) {
-        Toast.error('Failed to delete attachment');
+        Toast.error('删除附件失败');
       }
     },
     [todoId]
@@ -183,8 +190,9 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
   // ─── 更新所属项目 ──────────────────────────────────────
   const handleGoalChange = useCallback(
     async (goalId: string) => {
+      // 原子性检查+设置，防止竞态
       if (updatingGoalRef.current) return;
-      updatingGoalRef.current = true;
+      updatingGoalRef.current = true; // 立即设置，后续异步操作不会重入
       setUpdatingGoal(true);
       try {
         const updated = await api.updateTodo(todoId, {
@@ -214,7 +222,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
         setTodo(updated);
         onStatusChanged?.();
       } catch (e) {
-        Toast.error('Failed to update deadline');
+        Toast.error('更新截止日期失败');
       }
     },
     [todo, todoId, onStatusChanged]
@@ -276,7 +284,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
         setTodo(updated);
         onStatusChanged?.();
       } catch (e) {
-        Toast.error('Failed to update remind time');
+        Toast.error('更新提醒时间失败');
       }
     },
     [todo, todoId, onStatusChanged]
@@ -292,7 +300,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
         setCustomRemindTime(datetime);
         onStatusChanged?.();
       } catch (e) {
-        Toast.error('Failed to update remind time');
+        Toast.error('更新提醒时间失败');
       }
     },
     [todoId, onStatusChanged]
@@ -307,14 +315,54 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
   return (
     <div className="wk-todo-side-panel">
       <div className="wk-todo-side-panel__header">
-        <span className="wk-todo-side-panel__header-title">Detail</span>
-        <button type="button" className="wk-todo-side-panel__close" onClick={onClose}>
-          ✕
-        </button>
+        {showBack ? (
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              color: '#666', fontSize: '13px', padding: '2px 4px',
+              appearance: 'none' as const,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#7C5CFC')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#666')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            返回
+          </button>
+        ) : (
+          <span className="wk-todo-side-panel__header-title">任务详情</span>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {todo && (
+            <button
+              type="button"
+              onClick={handleToggleStatus}
+              style={{
+                padding: '3px 10px', border: 'none', borderRadius: '4px',
+                background: todo.status === 'open' ? '#ef4444' : '#7C5CFC',
+                color: '#fff', fontSize: '12px', fontWeight: 500,
+                cursor: 'pointer', lineHeight: '1.5',
+                appearance: 'none' as const, outline: 'none',
+                transition: 'opacity 150ms',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+            >
+              {todo.status === 'open' ? '关闭任务' : '重新打开'}
+            </button>
+          )}
+          {!showBack && (
+            <button type="button" className="wk-todo-side-panel__close" onClick={onClose}>✕</button>
+          )}
+        </div>
       </div>
       <div className="wk-todo-side-panel__body">
-        {loading && <div className="wk-todo-list__loading">Loading...</div>}
-        {!loading && !todo && <div className="wk-todo-list__empty">Failed to load</div>}
+        {loading && <div className="wk-todo-list__loading">加载中...</div>}
+        {!loading && !todo && <div className="wk-todo-list__empty">加载失败</div>}
         {!loading && todo && (
           <>
             {/* 任务名 inline 编辑 */}
@@ -338,12 +386,17 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
               </h2>
             )}
 
-            {/* 状态切换 */}
-            <div className="wk-todo-detail__status" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <TodoStatusBadge status={todo.status} />
-              <button type="button" className="wk-todo-detail__action-btn" onClick={handleToggleStatus}>
-                {todo.status === 'open' ? '✕ Close' : '↺ Reopen'}
-              </button>
+            {/* 状态标签（只读属性，操作在右上角） */}
+            <div className="wk-todo-detail__status">
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '2px 8px', borderRadius: '4px',
+                background: '#f0f0f0', color: '#555',
+                fontSize: '11px', fontWeight: 500,
+                letterSpacing: '0.2px',
+              }}>
+                {todo.status === 'open' ? '待处理' : '已完成'}
+              </span>
             </div>
 
             {/* 备注 */}
@@ -355,7 +408,31 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                 <div style={{ fontSize: '14px', color: 'var(--wk-text-primary, #1a1a1a)', marginBottom: '8px' }}>
                   <strong style={{ fontWeight: 500 }}>负责人</strong>
                 </div>
-                <MemberPicker mode="direct" todoId={todo.id} assignees={todo.assignees ?? []} onChanged={load} channel={channel} />
+                <MemberPicker
+                  mode="direct"
+                  todoId={todo.id}
+                  assignees={todo.assignees ?? []}
+                  onChanged={(addedUid, removedUid) => {
+                    // 乐观更新 assignees，不重载整个 todo
+                    setTodo((prev) => {
+                      if (!prev) return prev;
+                      let assignees = [...(prev.assignees ?? [])];
+                      if (removedUid) {
+                        assignees = assignees.filter((a) => a.user_id !== removedUid);
+                      }
+                      if (addedUid) {
+                        assignees = [...assignees, {
+                          id: `optimistic_${addedUid}`,
+                          todo_id: prev.id,
+                          user_id: addedUid,
+                          created_at: new Date().toISOString(),
+                        }];
+                      }
+                      return { ...prev, assignees };
+                    });
+                  }}
+                  channel={channel}
+                />
               </div>
 
               {/* 截止日期 */}
@@ -363,21 +440,24 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                 <div style={{ fontSize: '14px', color: 'var(--wk-text-primary, #1a1a1a)', marginBottom: '8px' }}>
                   <strong style={{ fontWeight: 500 }}>截止日期</strong>
                 </div>
-                <input
-                  type="date"
-                  value={todo.deadline ? new Date(todo.deadline).toISOString().split('T')[0] : ''}
-                  onChange={(e) => handleDeadlineChange(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 10px',
-                    border: '1px solid var(--wk-border-default, #e5e5e5)',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    background: 'var(--wk-bg-surface, #fff)',
-                    color: 'var(--wk-text-primary, #1a1a1a)',
-                    outline: 'none',
-                    cursor: 'pointer',
+                <DatePicker
+                  style={{ width: '100%' }}
+                  density="compact"
+                  placeholder="选择截止日期"
+                  value={todo.deadline ? new Date(todo.deadline) : undefined}
+                  onChange={(date) => {
+                    if (!date) { handleDeadlineChange(''); return; }
+                    const d = date instanceof Date ? date : new Date(date as string);
+                    const yyyy = d.getFullYear();
+                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    const off = new Date().getTimezoneOffset();
+                    const sign = off <= 0 ? '+' : '-';
+                    const oh = String(Math.floor(Math.abs(off) / 60)).padStart(2, '0');
+                    const om = String(Math.abs(off) % 60).padStart(2, '0');
+                    handleDeadlineChange(`${yyyy}-${mm}-${dd}T23:59:59${sign}${oh}:${om}`);
                   }}
+                  disabledDate={(date) => !!date && date < new Date(new Date().setHours(0,0,0,0))}
                 />
               </div>
 
@@ -386,7 +466,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                 <div style={{ fontSize: '14px', color: 'var(--wk-text-primary, #1a1a1a)', marginBottom: '8px' }}>
                   <strong style={{ fontWeight: 500 }}>提醒时间</strong>
                 </div>
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '6px', width: '100%', minWidth: 0 }}>
                   <button
                     type="button"
                     className={`wk-detail-panel__remind-btn ${remindMode === 'none' ? 'wk-detail-panel__remind-btn--active' : ''}`}
@@ -400,7 +480,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     onClick={() => handleRemindModeChange('1h')}
                     disabled={!todo.deadline}
                   >
-                    截止前1小时
+                    前1小时
                   </button>
                   <button
                     type="button"
@@ -408,7 +488,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     onClick={() => handleRemindModeChange('1d')}
                     disabled={!todo.deadline}
                   >
-                    截止前1天
+                    前1天
                   </button>
                   <button
                     type="button"
@@ -426,13 +506,15 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     onBlur={(e) => handleCustomRemindTimeChange(e.target.value)}
                     style={{
                       width: '100%',
+                      maxWidth: '100%',
                       padding: '6px 10px',
-                      border: '1px solid var(--wk-border-default, #e5e5e5)',
+                      border: '1px solid #e5e5e5',
                       borderRadius: '6px',
                       fontSize: '13px',
-                      background: 'var(--wk-bg-surface, #fff)',
-                      color: 'var(--wk-text-primary, #1a1a1a)',
+                      background: '#fff',
+                      color: '#1a1a1a',
                       outline: 'none',
+                      boxSizing: 'border-box' as const,
                     }}
                   />
                 )}
@@ -449,6 +531,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                   disabled={updatingGoal}
                   style={{
                     width: '100%',
+                    maxWidth: '100%',
                     padding: '6px 10px',
                     border: '1px solid var(--wk-border-default, #e5e5e5)',
                     borderRadius: '6px',
@@ -458,9 +541,10 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     outline: 'none',
                     cursor: 'pointer',
                     opacity: updatingGoal ? 0.5 : 1,
+                    boxSizing: 'border-box' as const,
                   }}
                 >
-                  <option value="">No goal</option>
+                  <option value="">未设置项目</option>
                   {goals.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.title}
@@ -469,17 +553,41 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                 </select>
               </div>
 
-              {/* 来源频道跳转按钮 */}
-              {todo.source_channel_id && (
-                <div style={{ marginBottom: '4px' }}>
-                  <button type="button" className="wk-detail-panel__channel-btn" onClick={handleJumpToChannel}>
-                    # {todo.source_name || '频道'} →
+              {/* 来源频道 */}
+              {todo.source_channel_id && todo.source_channel_type && (
+                <div style={{ marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                  <span style={{ fontSize: '13px', color: '#999', whiteSpace: 'nowrap', flexShrink: 0 }}>来源</span>
+                  <button
+                    type="button"
+                    onClick={handleJumpToChannel}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: 0, border: 'none', background: 'transparent',
+                      cursor: 'pointer', appearance: 'none' as const, outline: 'none',
+                      color: '#7C5CFC', fontSize: '13px', fontWeight: 500,
+                      textDecoration: 'underline', textDecorationColor: 'transparent',
+                      transition: 'text-decoration-color 150ms',
+                      minWidth: 0, overflow: 'hidden',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.textDecorationColor = '#7C5CFC')}
+                    onMouseLeave={(e) => (e.currentTarget.style.textDecorationColor = 'transparent')}
+                  >
+                    <img
+                      alt=""
+                      src={WKApp.shared.avatarChannel(new Channel(todo.source_channel_id, todo.source_channel_type))}
+                      style={{ width: 18, height: 18, borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {todo.source_name || '查看来源'}
+                    </span>
+                    <span style={{ fontSize: '11px', opacity: 0.6, flexShrink: 0 }}>↗</span>
                   </button>
                 </div>
               )}
 
               <div className="wk-todo-detail__timestamps">
-                Created: {new Date(todo.created_at).toLocaleString()} · Updated: {new Date(todo.updated_at).toLocaleString()}
+                创建于 {new Date(todo.created_at).toLocaleString('zh-CN')} · 更新于 {new Date(todo.updated_at).toLocaleString('zh-CN')}
               </div>
             </div>
 
@@ -500,7 +608,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                       fontWeight: 500,
                     }}
                   >
-                    + Add
+                    + 添加
                   </button>
                 )}
               </div>
@@ -512,11 +620,13 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     value={attachUrl}
                     onChange={(e) => setAttachUrl(e.target.value)}
                     style={{
+                      width: '100%',
                       padding: '6px 10px',
                       border: '1px solid var(--wk-border-default, #e5e5e5)',
                       borderRadius: '6px',
                       fontSize: '12px',
                       outline: 'none',
+                      boxSizing: 'border-box' as const,
                     }}
                   />
                   <input
@@ -528,11 +638,13 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                       if (e.key === 'Enter') handleAddAttachment();
                     }}
                     style={{
+                      width: '100%',
                       padding: '6px 10px',
                       border: '1px solid var(--wk-border-default, #e5e5e5)',
                       borderRadius: '6px',
                       fontSize: '12px',
                       outline: 'none',
+                      boxSizing: 'border-box' as const,
                     }}
                   />
                   <div style={{ display: 'flex', gap: '6px' }}>
@@ -552,7 +664,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                         opacity: !attachUrl.trim() || attachSubmitting ? 0.5 : 1,
                       }}
                     >
-                      {attachSubmitting ? '...' : 'Add'}
+                      {attachSubmitting ? '...' : '添加'}
                     </button>
                     <button
                       type="button"
@@ -571,7 +683,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                         fontSize: '12px',
                       }}
                     >
-                      Cancel
+                      取消
                     </button>
                   </div>
                 </div>
@@ -624,7 +736,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                   </div>
                 ))}
                 {attachments.length === 0 && !showAttachForm && (
-                  <div style={{ color: 'var(--wk-text-disabled, #bbb)', fontSize: '13px', padding: '4px 0' }}>No attachments</div>
+                  <div style={{ color: 'var(--wk-text-disabled, #bbb)', fontSize: '13px', padding: '4px 0' }}>暂无附件</div>
                 )}
               </div>
             </div>
@@ -640,7 +752,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                         <UserName uid={c.user_id} />
                       </span>
                       <span style={{ fontSize: '11px', color: 'var(--wk-text-tertiary, #999)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {new Date(c.created_at).toLocaleString()}
+                        {new Date(c.created_at).toLocaleString('zh-CN')}
                         {c.user_id === WKApp.loginInfo.uid && (
                           <button
                             type="button"
@@ -663,13 +775,13 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     <div style={{ color: 'var(--wk-text-secondary, #555)', lineHeight: '1.5' }}>{c.content}</div>
                   </div>
                 ))}
-                {comments.length === 0 && <div style={{ color: 'var(--wk-text-disabled, #bbb)', fontSize: '13px', padding: '8px 0' }}>No comments yet</div>}
+                {comments.length === 0 && <div style={{ color: 'var(--wk-text-disabled, #bbb)', fontSize: '13px', padding: '8px 0' }}>暂无评论</div>}
               </div>
-              {/* Add comment */}
+              {/* 添加 comment */}
               <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
                 <input
                   type="text"
-                  placeholder="Add a comment..."
+                  placeholder="添加评论..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   onKeyDown={(e) => {
@@ -680,12 +792,14 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                   }}
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     padding: '8px 12px',
                     border: '1px solid var(--wk-border-default, #e5e5e5)',
                     borderRadius: '6px',
                     fontSize: '13px',
                     outline: 'none',
                     transition: 'border-color 150ms',
+                    boxSizing: 'border-box' as const,
                   }}
                 />
                 <button
@@ -705,7 +819,7 @@ export default function DetailPanel({ todoId, onClose, onStatusChanged, channel 
                     transition: 'opacity 150ms',
                   }}
                 >
-                  Send
+                  发送
                 </button>
               </div>
             </div>

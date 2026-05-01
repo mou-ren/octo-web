@@ -5,6 +5,7 @@ import type { IModule, ConversationContext } from '@octo/base';
 import { ChannelTypeGroup } from 'wukongimjssdk';
 import WKSDK from 'wukongimjssdk';
 import TodoPage from './pages/TodoPage';
+import ChatTodoPanel from './panel/ChatTodoPanel';
 import { createTodo } from './api/todoApi';
 import { Toast } from './utils/toast';
 import CreateTaskModal from './ui/CreateTaskModal';
@@ -74,6 +75,22 @@ function CheckSquareIcon() {
 }
 
 /**
+ * Checklist icon for chat header (medium size).
+ */
+function ChecklistIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+
+/**
  * TodoModule — registers the Todo feature into Octo web.
  */
 export default class TodoModule implements IModule {
@@ -89,7 +106,7 @@ export default class TodoModule implements IModule {
     // Register route
     WKApp.route.register('/todo', () => <TodoPage />);
 
-    // Register NavRail menu item (sort=2000, between chat=1000 and contacts=4000)
+    // Register NavRail menu item (sort=4001, after contacts=4000)
     WKApp.menus.register(
       'todo',
       () => {
@@ -102,7 +119,7 @@ export default class TodoModule implements IModule {
         );
         return m;
       },
-      2000,
+      4001,
     );
 
     // Mount global CreateTaskModal portal (handles Alt+Enter from any conversation)
@@ -111,6 +128,8 @@ export default class TodoModule implements IModule {
     // Chat integration
     this.registerChatContextMenu();
     this.registerChatToolbar();
+    this.registerChatTodoPanel();
+    this.registerChatHeaderIcon();
   }
 
   /**
@@ -169,6 +188,57 @@ export default class TodoModule implements IModule {
         }
         return <ChatToolbarTodoButton ctx={ctx} />;
       },
+    );
+  }
+
+  /**
+   * Register ChatTodoPanel in the right sidebar (mutually exclusive with thread panel).
+   */
+  private registerChatTodoPanel(): void {
+    WKApp.endpoints.registerChatTodoPanel(
+      'chattodopanel',
+      ({ channel, onClose }) => {
+        if (channel.channelType !== ChannelTypeGroup && channel.channelType !== ChannelTypeCommunityTopic) {
+          return undefined;
+        }
+        return (
+          <ChatTodoPanel
+            channelId={channel.channelID}
+            channelType={channel.channelType}
+            onClose={onClose}
+          />
+        );
+      }
+    );
+  }
+
+  /**
+   * Register todo icon in chat header (right side).
+   * Toggles the ChatTodoPanel via mittBus event.
+   */
+  private registerChatHeaderIcon(): void {
+    WKApp.endpoints.registerChannelHeaderRightItem(
+      'channelheader.todo',
+      ({ channel }) => {
+        // Only show in group and topic channels
+        if (channel.channelType !== ChannelTypeGroup && channel.channelType !== ChannelTypeCommunityTopic) {
+          return undefined;
+        }
+        return (
+          <div
+            key="todo-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              WKApp.mittBus.emit('wk:toggle-todo-panel', { channelId: channel.channelID, channelType: channel.channelType });
+            }}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            title="任务列表"
+          >
+            <ChecklistIcon />
+          </div>
+        );
+      },
+      5000, // sort order
     );
   }
 }

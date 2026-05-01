@@ -452,7 +452,8 @@
 
 /* ─── Detail Side Panel (overlay on right of todo list) ──── */
 
-.wk-todo-side-panel {
+/* TodoPage 内的 detail panel 固定宽度（ChatTodoPanel 里不生效） */
+.wk-todo-list-view .wk-todo-side-panel {
   width: 480px;
   min-width: 420px;
   flex-shrink: 0;
@@ -618,4 +619,109 @@
 .wk-todo-item-deadline--overdue {
   color: var(--wk-color-error, #ef4444);
   font-weight: 500;
+}
+
+/* ─── 时间分组 ──────────────────────────────────────────── */
+.wk-todo-group {
+  margin-bottom: 16px;
+}
+
+.wk-todo-group__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+}
+
+.wk-todo-group__header--collapsible {
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 150ms;
+}
+
+.wk-todo-group__header--collapsible:hover {
+  background: var(--wk-bg-hover, rgba(0,0,0,0.04));
+}
+
+.wk-todo-group__icon {
+  font-size: 13px;
+  width: 18px;
+  text-align: center;
+}
+
+.wk-todo-group__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wk-text-tertiary, #999);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex: 1;
+}
+
+.wk-todo-group__count {
+  font-size: 11px;
+  color: var(--wk-text-disabled, #bbb);
+}
+
+.wk-todo-load-more {
+  display: block;
+  margin: 12px auto;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: var(--wk-brand-tint-06, rgba(124, 92, 252, 0.06));
+  color: var(--wk-brand-primary, #7C5CFC);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ─── Sidebar 新建任务 ──────────────────────────────────── */
+.wk-todo-sidebar__create {
+  padding: 12px 12px 8px;
+}
+
+.wk-todo-sidebar__create-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--wk-brand-primary, #7C5CFC);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: opacity 150ms;
+  box-shadow: 0 1px 3px rgba(124, 92, 252, 0.3);
+}
+
+.wk-todo-sidebar__create-btn:hover {
+  opacity: 0.9;
+}
+
+/* ─── 分组 section header（群聊风格） ──────────────────── */
+.wk-todo-group__section-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  margin: 4px -12px;
+  background: rgba(0, 0, 0, 0.03);
+  color: #888;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  letter-spacing: 0.2px;
+  transition: background 150ms;
+}
+
+.wk-todo-group__section-header:hover {
+  background: rgba(0, 0, 0, 0.06);
 }

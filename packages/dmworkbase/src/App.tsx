@@ -10,6 +10,7 @@ export type MittEvents = {
     thread: import("./Service/Thread").Thread | null;
   };
   "wk:close-thread-panel": undefined;
+  "wk:toggle-todo-panel": { channelId: string; channelType: number };
   "wk:switch-sidebar-tab": string;
   "wk:file-preview": {
     url: string;

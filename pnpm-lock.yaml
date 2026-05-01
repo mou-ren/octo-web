@@ -628,6 +628,9 @@ importers:
       '@octo/base':
         specifier: workspace:*
         version: link:../dmworkbase
+      '@douyinfe/semi-icons':
+        specifier: ^2.93.0
+        version: 2.93.0(react@17.0.2)
       '@douyinfe/semi-ui':
         specifier: ^2.93.0
         version: 2.93.0(@tiptap/suggestion@3.22.2(@tiptap/core@3.22.2(@tiptap/pm@3.22.2))(@tiptap/pm@3.22.2))(@types/react-dom@19.2.3(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@17.0.2(react@17.0.2))(react@17.0.2)

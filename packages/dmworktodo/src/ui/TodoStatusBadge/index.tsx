@@ -8,8 +8,8 @@ export interface TodoStatusBadgeProps {
 }
 
 const STATUS_LABELS: Record<TodoStatus, string> = {
-  open: 'Open',
-  closed: 'Closed',
+  open: '待处理',
+  closed: '已完成',
 };
 
 export default function TodoStatusBadge({ status, className }: TodoStatusBadgeProps) {

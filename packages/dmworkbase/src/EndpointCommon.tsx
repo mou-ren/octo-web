@@ -289,6 +289,28 @@ export class EndpointCommon {
     );
   }
 
+  chatTodoPanel(channel: Channel, onClose: () => void): JSX.Element | undefined {
+    return EndpointManager.shared.invoke(EndpointCategory.chatTodoPanel, {
+      channel,
+      onClose,
+    });
+  }
+
+  registerChatTodoPanel(
+    sid: string,
+    callback: (param: any) => JSX.Element | undefined
+  ) {
+    EndpointManager.shared.setMethod(
+      EndpointCategory.chatTodoPanel,
+      (param) => {
+        return callback(param);
+      },
+      {
+        category: EndpointCategory.chatTodoPanel,
+      }
+    );
+  }
+
   callOnLogin() {
     [...this._onLogins].forEach(fn => fn());
   }

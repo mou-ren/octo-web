@@ -3,6 +3,7 @@
   flex-direction: column;
   gap: var(--wk-sp-1, 4px);
   padding: var(--wk-sp-3, 12px);
+  margin-bottom: 6px;
   background: var(--wk-bg-surface, #fff);
   border: 1px solid var(--wk-border-default, #e5e5e5);
   border-radius: var(--wk-r-sm, 6px);
@@ -32,13 +33,14 @@
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  border: 1.5px solid var(--wk-border-default, #d0d0d0);
+  border: 1.5px solid var(--wk-text-tertiary, #aaa);
   border-radius: var(--wk-r-xs, 3px);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s ease;
+  background: var(--wk-bg-surface, #fff);
 }
 
 .wk-todo-card__checkbox:hover {

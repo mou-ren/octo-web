@@ -90,19 +90,16 @@
 }
 
 .wk-member-picker__tag-remove {
-  display: none;
+  display: inline-flex;
+  align-items: center;
   border: none;
   background: none;
-  color: var(--wk-text-disabled, #ccc);
+  color: var(--wk-text-disabled, #bbb);
   cursor: pointer;
   font-size: 10px;
   padding: 0 2px;
   line-height: 1;
   transition: color 150ms;
-}
-
-.wk-member-picker__tag:hover .wk-member-picker__tag-remove {
-  display: inline-flex;
 }
 
 .wk-member-picker__tag-remove:hover {

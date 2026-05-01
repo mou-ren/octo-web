@@ -2,10 +2,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
   background: var(--wk-bg-surface, #fff);
-  border-left: 1px solid var(--wk-border-default, #e5e5e5);
-  width: 320px;
-  min-width: 280px;
+  overflow: hidden;
 }
 
 .wk-todo-chat-panel__header {
@@ -65,6 +64,57 @@
   margin-bottom: var(--wk-sp-1, 4px);
   padding: 0 var(--wk-sp-1, 4px);
 }
+
+/* ─── Tabs ─────────────────────────────────────────────── */
+
+.wk-todo-chat-panel__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--wk-border-default, #e5e5e5);
+  padding: 0 var(--wk-sp-2, 8px);
+}
+
+.wk-todo-chat-panel__tab {
+  flex: 1;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  color: var(--wk-text-tertiary, #999);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 150ms, border-color 150ms;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.wk-todo-chat-panel__tab--active {
+  color: var(--wk-brand-primary, #7C5CFC);
+  border-bottom-color: var(--wk-brand-primary, #7C5CFC);
+}
+
+.wk-todo-chat-panel__tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--wk-bg-base, #f0f0f0);
+  color: var(--wk-text-tertiary, #999);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wk-todo-chat-panel__tab--active .wk-todo-chat-panel__tab-count {
+  background: var(--wk-brand-tint-06, rgba(124, 92, 252, 0.1));
+  color: var(--wk-brand-primary, #7C5CFC);
+}
+
+/* ─── Empty ─────────────────────────────────────────────── */
 
 .wk-todo-chat-panel__empty {
   display: flex;

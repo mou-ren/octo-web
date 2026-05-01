@@ -69,7 +69,7 @@ export function useMemberList(options: UseMemberListOptions = {}): UseMemberList
       .map((m: SpaceMember) => ({
         uid: m.uid,
         name: m.name || m.uid,
-        avatar: m.avatar,
+        avatar: WKApp.shared.avatarUser(m.uid),
         isBot: m.robot === 1,
       }));
   }, []);
