@@ -65,7 +65,6 @@ export function useMemberList(options: UseMemberListOptions = {}): UseMemberList
     }
 
     return all
-      .filter((m: SpaceMember) => m.uid !== WKApp.loginInfo.uid)
       .map((m: SpaceMember) => ({
         uid: m.uid,
         name: m.name || m.uid,
@@ -89,7 +88,6 @@ export function useMemberList(options: UseMemberListOptions = {}): UseMemberList
       if (!subscribers) return [];
 
       return subscribers
-        .filter((s: Subscriber) => s.uid !== WKApp.loginInfo.uid) // 过滤当前用户
         .map((s: Subscriber) => ({
           uid: s.uid,
           name: s.remark || s.name || s.uid,

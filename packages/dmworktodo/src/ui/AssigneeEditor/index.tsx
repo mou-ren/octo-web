@@ -146,7 +146,6 @@ export default function AssigneeEditor({ todoId, assignees, onChanged }: Assigne
     return contacts
       .filter((c) =>
         !assignedUids.has(c.uid) &&
-        c.uid !== WKApp.loginInfo.uid &&
         (c.name?.toLowerCase().includes(keyword) || c.uid.toLowerCase().includes(keyword))
       )
       .slice(0, 8)
@@ -203,7 +202,6 @@ export default function AssigneeEditor({ todoId, assignees, onChanged }: Assigne
     const candidates = contacts
       .filter((c) =>
         !assignedUids.has(c.uid) &&
-        c.uid !== WKApp.loginInfo.uid &&
         (c.name?.toLowerCase().includes(keyword) || c.uid.toLowerCase().includes(keyword))
       )
       .slice(0, 8);
