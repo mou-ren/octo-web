@@ -418,7 +418,8 @@ export default class SummaryDetailPage extends Component<SummaryDetailPageProps,
         const { detail } = this.state;
         if (!detail?.result?.content?.trim()) return;
         WKApp.shared.baseContext.showConversationSelect(async (channels: Channel[]) => {
-            const chunks = splitSummaryText(detail?.result?.content ?? '');
+            const cleanContent = (detail?.result?.content ?? '').replace(/\[\d+\]/g, '').replace(/  +/g, ' ').trim();
+            const chunks = splitSummaryText(cleanContent);
             const errors: string[] = [];
 
             for (const ch of channels) {
