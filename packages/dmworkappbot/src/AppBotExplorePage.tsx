@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Channel, ChannelTypePerson, WKSDK } from "wukongimjssdk"
+import { Channel, ChannelTypePerson, ChannelInfo, WKSDK } from "wukongimjssdk"
 import { WKApp, SpaceService } from "@octo/base"
 import BotCard, { AppBotInfo } from "./BotCard"
 import "./AppBotExplorePage.css"
@@ -67,10 +67,18 @@ export default function AppBotExplorePage() {
 
   const openChat = (bot: AppBotInfo) => {
     const channel = new Channel(bot.uid, ChannelTypePerson)
-    // Ensure conversation exists in SDK before navigating — without this,
-    // the conversation list stays empty when user has never chatted with this Bot
+    // Ensure conversation exists in SDK before navigating
     if (!WKSDK.shared().conversationManager.findConversation(channel)) {
       WKSDK.shared().conversationManager.createEmptyConversation(channel)
+    }
+    // Ensure channel info (name + avatar) is cached so the chat UI
+    // can display Bot identity immediately without waiting for a fetch
+    if (!WKSDK.shared().channelManager.getChannelInfo(channel)) {
+      const info = new ChannelInfo()
+      info.channel = channel
+      info.title = bot.display_name
+      info.logo = bot.avatar || ""
+      WKSDK.shared().channelManager.setChannleInfoForCache(info)
     }
     // Pre-switch to chat tab and give extra time for fullWidth → normal layout
     // transition (contentRight goes from display:none to visible, needs re-layout)
