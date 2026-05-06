@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Channel, ChannelTypePerson, ChannelInfo, WKSDK } from "wukongimjssdk"
+import { Channel, ChannelTypePerson, WKSDK } from "wukongimjssdk"
 import { WKApp, ChatContentPage, SpaceService } from "@octo/base"
 import "./AppBotPage.css"
 
@@ -53,6 +53,22 @@ function BotIconFallback() {
       <line x1="12" y1="4" x2="12" y2="8" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
       <circle cx="12" cy="3.5" r="1.5" fill="white" />
     </svg>
+  )
+}
+
+/** Bot chat header — renders directly from bot data, bypasses SDK channelInfo */
+function BotChatHeader({ bot }: { bot: AppBotInfo }) {
+  const showImg = isSafeImageUrl(bot.avatar)
+  return (
+    <div className="appbot-chat-header">
+      <div
+        className="appbot-chat-header-avatar"
+        style={!showImg ? { background: pickGradient(bot.uid || bot.id) } : undefined}
+      >
+        {showImg ? <img src={bot.avatar} alt={bot.display_name} /> : <BotIconFallback />}
+      </div>
+      <div className="appbot-chat-header-name">{bot.display_name}</div>
+    </div>
   )
 }
 
@@ -119,24 +135,19 @@ export default function AppBotPage() {
     setSelectedUid(bot.uid)
     const channel = new Channel(bot.uid, ChannelTypePerson)
 
-    // 1. Write channelInfo FIRST — must happen before createEmptyConversation
-    //    so that when ConversationList renders the new item, channelInfo is
-    //    already in cache and no fetchChannelInfo is triggered.
-    const info = new ChannelInfo()
-    info.channel = channel
-    info.title = bot.display_name
-    info.logo = bot.avatar || ""
-    info.orgData = { displayName: bot.display_name, robot: 1, name: bot.display_name }
-    WKSDK.shared().channelManager.setChannleInfoForCache(info)
-
-    // 2. Ensure conversation exists
+    // Ensure conversation exists in SDK
     if (!WKSDK.shared().conversationManager.findConversation(channel)) {
       WKSDK.shared().conversationManager.createEmptyConversation(channel)
     }
 
-    // 3. Push chat content to routeRight
+    // Render bot chat with our own header (bypasses SDK channelInfo entirely)
     WKApp.routeRight.replaceToRoot(
-      <ChatContentPage key={channel.getChannelKey()} channel={channel} />
+      <div key={channel.getChannelKey()} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <BotChatHeader bot={bot} />
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <ChatContentPage channel={channel} />
+        </div>
+      </div>
     )
   }
 
