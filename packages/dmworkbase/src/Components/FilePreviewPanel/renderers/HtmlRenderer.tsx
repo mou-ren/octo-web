@@ -247,7 +247,10 @@ const HtmlRenderer: React.FC<HtmlRendererProps> = ({
     );
   }
 
-  // 预览模式：使用 srcdoc 代替 blob URL，避免 CSP 阻止 blob: 协议
+  // 预览模式：使用 srcdoc 渲染 HTML
+  // 安全说明：sandbox 只允许 allow-scripts，不加 allow-same-origin 以防止 XSS
+  // 副作用：HTML 内部创建的 blob:null URL 可能被线上 CSP 阻止
+  // TODO: 需运维配合修改 nginx CSP，添加 blob: 到 script-src/connect-src
   return (
     <div className="wk-file-preview-html-renderer wk-file-preview-html-renderer--preview">
       {iframeLoading && (
