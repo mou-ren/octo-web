@@ -17,7 +17,7 @@ export default class ItemGroup extends Component<ItemGroupProps> {
                     this.props.onClick()
                 }
             }}>
-                <WKAvatar src={this.props.avatar} style={{width:"40px",height:"40px"}}></WKAvatar>
+                <WKAvatar src={this.props.avatar} style={{width:"40px",height:"40px"}} lazy></WKAvatar>
                 <div className="wk-item-group-name" dangerouslySetInnerHTML={{ __html: sanitizeHighlight(this.props.name) }}></div>
             </div>
         }

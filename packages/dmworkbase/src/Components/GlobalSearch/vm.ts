@@ -62,12 +62,16 @@ export default class GlobalSearchVM extends ProviderListener {
     }
 
     // tab选中事件
+    // 优化：/search/global 一次返回 friends / groups / messages 全部结果，
+    // 切 contacts / groups 不必重发搜索，仅切换 UI 即可，避免打开弹窗后每次
+    // 点 tab 都触发一次服务端搜索。files tab 依赖 content_type 过滤，仍需重发。
     public onTabClick(key: string) {
         if (key === "files") {
             this.contentTypes = [MessageContentTypeConst.file]
             this.initLoad()
             this.requestSearch()
-        } else {
+        } else if (this.selectedTabKey === "files") {
+            // 从 files 切回 contacts/groups，content_type 需要清空并重发一次
             this.contentTypes = []
             this.initLoad()
             this.requestSearch()

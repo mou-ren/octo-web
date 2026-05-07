@@ -27,7 +27,7 @@ export default class ItemContacts extends Component<ItemContactsProps> {
                     this.props.onClick()
                 }
             }}>
-                <WKAvatar src={this.props.avatar} style={{width:"40px",height:"40px"}}></WKAvatar>
+                <WKAvatar src={this.props.avatar} style={{width:"40px",height:"40px"}} lazy></WKAvatar>
                 <div className="wk-item-contacts-name">
                     <span dangerouslySetInnerHTML={{ __html: sanitizeHighlight(this.props.name) }}></span>
                     {/* YUJ-138: 外部成员来源 Space 后缀（企微风格），与 @Mention 候选、成员列表视觉一致 */}

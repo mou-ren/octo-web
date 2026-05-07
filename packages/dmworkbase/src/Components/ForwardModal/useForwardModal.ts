@@ -3,6 +3,7 @@ import { WKSDK, Channel, ChannelInfo, ChannelInfoListener, ChannelTypeGroup } fr
 import { ConversationWrap } from "../../Service/Model"
 import { ChannelTypeCommunityTopic } from "../../Service/Const"
 import { shouldSkipChannelForSpace, shouldSkipPersonConversationForSpace } from "../../Service/SpaceService"
+import { debounce } from "../../Utils/rateLimit"
 import WKApp from "../../App"
 import { ForwardItem } from "./ForwardModal"
 
@@ -68,6 +69,8 @@ export interface UseForwardModalResult {
   toggleSelect: (item: ForwardItem) => void
   confirm: () => void
   reset: () => void
+  /** 懒加载：项进入视口时调用，按需拉取 channelInfo；去重 */
+  requestChannelInfoIfNeeded: (item: ForwardItem) => void
 }
 
 export function useForwardModal(
@@ -103,6 +106,24 @@ export function useForwardModal(
 
   // 保存原始 wraps 引用，供 channelInfoListener 触发后重新构建
   const wrapsRef = useRef<ConversationWrap[]>([])
+
+  // 懒加载：记录已发起 fetchChannelInfo 的 channelID，避免重复请求
+  const fetchedRef = useRef<Set<string>>(new Set())
+
+  /**
+   * 懒加载入口：列表项进入视口时调用。仅当本地 channelInfo 缺失且该 channel
+   * 未发起过请求时才调 fetchChannelInfo。去重避免 rebuildConvItems forceUpdate
+   * 之后重复打同一个接口。
+   */
+  const requestChannelInfoIfNeeded = useCallback((item: ForwardItem) => {
+    if (!item?.channelID) return
+    if (fetchedRef.current.has(item.channelID)) return
+    const ch = channelMapRef.current.get(item.channelID)
+      ?? new Channel(item.channelID, item.channelType)
+    if (WKSDK.shared().channelManager.getChannelInfo(ch)) return
+    fetchedRef.current.add(item.channelID)
+    WKSDK.shared().channelManager.fetchChannelInfo(ch)
+  }, [])
 
   const rebuildConvItems = useCallback(() => {
     // 分离：群聊（非子区）和子区
@@ -161,16 +182,14 @@ export function useForwardModal(
     async function load() {
       setLoading(true)
       try {
-        // 最近会话
+        // 最近会话：仅构造 wrap，不再对每个 conv 主动 fetchChannelInfo。
+        // channelInfo 由 ForwardModal 中每个 ItemRow 的 VisibilityTrigger 在
+        // 进入视口时按需拉取（去重 + debounce 合批 forceUpdate）。
         const conversations = WKSDK.shared().conversationManager.conversations ?? []
         const wraps: ConversationWrap[] = []
         for (const conv of conversations) {
           if (shouldSkipChannelForSpace(conv.channel)) continue
           if (shouldSkipPersonConversationForSpace(conv)) continue
-          const info = WKSDK.shared().channelManager.getChannelInfo(conv.channel)
-          if (!info) {
-            WKSDK.shared().channelManager.fetchChannelInfo(conv.channel)
-          }
           wraps.push(new ConversationWrap(conv))
         }
         wrapsRef.current = sortConversations(wraps)
@@ -207,9 +226,11 @@ export function useForwardModal(
       }
     }
 
-    // 订阅 channelInfo 更新，触发列表重渲（头像/名称补全）
+    // 订阅 channelInfo 更新，触发列表重渲（头像/名称补全）。
+    // 使用 debounce 合批，避免视口内多个懒加载请求集中返回时连续触发 rebuild。
+    const rebuildDebounced = debounce(() => rebuildConvItems(), 150)
     const channelListener: ChannelInfoListener = (_channelInfo: ChannelInfo) => {
-      rebuildConvItems()
+      rebuildDebounced()
     }
     WKSDK.shared().channelManager.addListener(channelListener)
 
@@ -217,6 +238,7 @@ export function useForwardModal(
 
     return () => {
       WKSDK.shared().channelManager.removeListener(channelListener)
+      rebuildDebounced.cancel()
     }
   }, [rebuildConvItems])
 
@@ -337,5 +359,6 @@ export function useForwardModal(
     toggleSelect,
     confirm,
     reset,
+    requestChannelInfoIfNeeded,
   }
 }

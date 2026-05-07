@@ -20,8 +20,17 @@ export default function ConversationSelect({
   onCancel,
   title,
 }: ConversationSelectProps) {
-  const { items, allItems, selectedIDs, inputValue, loading, setInputValue, toggleSelect, confirm } =
-    useForwardModal(onFinished)
+  const {
+    items,
+    allItems,
+    selectedIDs,
+    inputValue,
+    loading,
+    setInputValue,
+    toggleSelect,
+    confirm,
+    requestChannelInfoIfNeeded,
+  } = useForwardModal(onFinished)
 
   return (
     <ForwardModal
@@ -35,6 +44,7 @@ export default function ConversationSelect({
       onToggleSelect={toggleSelect}
       onConfirm={confirm}
       onCancel={onCancel}
+      onItemVisible={requestChannelInfoIfNeeded}
     />
   )
 }

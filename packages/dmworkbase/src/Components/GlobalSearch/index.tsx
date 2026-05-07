@@ -21,65 +21,64 @@ export default class GlobalSearch extends Component<GlobalSearchProps> {
     vm!: GlobalSearchVM
 
 
-    tabPanel(key: string) {
+    // 同时挂载所有 tab 组件，通过 display 切换可见性。
+    // 避免切 tab 时 unmount 导致 <img>/VisibilityTrigger 全部重建，进而重新
+    // 触发头像请求（浏览器 HTTP cache 不一定命中，网络面板会看到"全量重拉"）。
+    tabPanels(currentKey: string) {
+        const vm = this.vm
+        const onClickOf = (type: string) => (item: any) => {
+            if (this.props.onClick) this.props.onClick(item, type)
+        }
+        const panelStyle = (key: string): React.CSSProperties =>
+            currentKey === key ? {} : { display: "none" }
 
-        // message
-        if (key === 'all') {
-            return <TabAll
-                searchResult={this.vm.searchResult}
-                keyword={this.vm.keyword}
-                loadMore={() => {
-                    this.vm.loadMore()
-                }}
-                onClick={(item, type) => {
-                    if (this.props.onClick) {
-                        this.props.onClick(item, type)
-                    }
-                }}
-            />
+        // 在 channel 内搜索时 tabList 只返回 all / files，不会展示 contacts/groups。
+        // 此时挂载 TabAll + TabFile 即可。
+        if (vm.searchInChannel) {
+            return <>
+                <div style={panelStyle("all")}>
+                    <TabAll
+                        searchResult={vm.searchResult}
+                        keyword={vm.keyword}
+                        loadMore={() => vm.loadMore()}
+                        onClick={(item, type) => onClickOf(type)(item)}
+                    />
+                </div>
+                <div style={panelStyle("files")}>
+                    <TabFile
+                        files={vm.searchResult?.messages}
+                        keyword={vm.keyword}
+                        loadMore={() => vm.loadMore()}
+                        onClick={onClickOf("file")}
+                    />
+                </div>
+            </>
         }
 
-        // contacts
-        if (key === 'contacts') {
-            return <TabContacts
-                friends={this.vm.searchResult?.friends}
-                keyword={this.vm.keyword}
-                onClick={(item) => {
-                    if (this.props.onClick) {
-                        this.props.onClick(item, "contacts")
-                    }
-                }}
-            ></TabContacts>
-        }
-
-        // groups
-        if (key === 'groups') {
-            return <TabGroup
-                groups={this.vm.searchResult?.groups}
-                keyword={this.vm.keyword}
-                onClick={(item) => {
-                    if (this.props.onClick) {
-                        this.props.onClick(item, "group")
-                    }
-                }}
-            ></TabGroup>
-        }
-
-        // files
-        if (key === 'files') {
-            return <TabFile
-                files={this.vm.searchResult?.messages}
-                keyword={this.vm.keyword}
-                loadMore={() => {
-                    this.vm.loadMore()
-                }}
-                onClick={(item) => {
-                    if (this.props.onClick) {
-                        this.props.onClick(item, "file")
-                    }
-                }}
-            />
-        }
+        return <>
+            <div style={panelStyle("contacts")}>
+                <TabContacts
+                    friends={vm.searchResult?.friends}
+                    keyword={vm.keyword}
+                    onClick={onClickOf("contacts")}
+                />
+            </div>
+            <div style={panelStyle("groups")}>
+                <TabGroup
+                    groups={vm.searchResult?.groups}
+                    keyword={vm.keyword}
+                    onClick={onClickOf("group")}
+                />
+            </div>
+            <div style={panelStyle("files")}>
+                <TabFile
+                    files={vm.searchResult?.messages}
+                    keyword={vm.keyword}
+                    loadMore={() => vm.loadMore()}
+                    onClick={onClickOf("file")}
+                />
+            </div>
+        </>
     }
 
     render(): ReactNode {
@@ -116,7 +115,7 @@ export default class GlobalSearch extends Component<GlobalSearchProps> {
                                 vm.onTabClick(key);
                             }}
                         >
-                            {this.tabPanel(vm.selectedTabKey)}
+                            {this.tabPanels(vm.selectedTabKey)}
                         </Tabs>
                     </div>
                 </div>

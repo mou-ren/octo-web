@@ -6,6 +6,8 @@ import { isBot } from "../WKAvatar";
 import BotDetailModal from "../BotDetailModal";
 import WKSDK, { Channel, ChannelInfo, ChannelInfoListener, ChannelTypePerson } from "wukongimjssdk";
 import { resolveExternalForViewer } from "../../Utils/externalViewer";
+import { debounce } from "../../Utils/rateLimit";
+import VisibilityTrigger from "../VisibilityTrigger";
 import "./tab-contacts.css"
 
 interface TabContactsProps {
@@ -26,13 +28,21 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
     };
 
     // YUJ-138 follow-up: channelInfo 到达后强制重渲，否则 resolveSourceSpaceName
-    // 走 fetchChannelInfo 异步分支时，首次渲染的 sourceSpaceName=""，UI 永远不更新。
+    // 首次读缓存未命中时，UI 永远不更新。
+    // 懒加载重构：使用 debounce 合批 forceUpdate，避免视口内多个 uid 集中返回
+    // 时触发 N 次重渲；并用 fetchedUids 记录已发起过的 uid，避免重复请求。
     private _channelInfoListener!: ChannelInfoListener
+    private _forceUpdateDebounced = debounce(() => this.forceUpdate(), 150)
+    private fetchedUids = new Set<string>()
+    // Sticky friends：files tab 切换时父层会把 friends 置为 undefined 触发
+    // /search/global 重拉，中间这段时间我们保留上一次的非空数据继续渲染，
+    // 避免 ItemContacts / <img> 节点被销毁-重建造成头像请求全量重发。
+    private stickyFriends?: any[]
 
     componentDidMount() {
         this._channelInfoListener = (channelInfo: ChannelInfo) => {
             if (channelInfo?.channel?.channelType === ChannelTypePerson) {
-                this.forceUpdate()
+                this._forceUpdateDebounced()
             }
         }
         WKSDK.shared().channelManager.addListener(this._channelInfoListener)
@@ -42,6 +52,26 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
         if (this._channelInfoListener) {
             WKSDK.shared().channelManager.removeListener(this._channelInfoListener)
         }
+        this._forceUpdateDebounced.cancel()
+    }
+
+    // 懒加载：仅当 friend 进入视口且字段缺失时，才触发 channelInfo 拉取。
+    // 通过 fetchedUids 去重，避免 forceUpdate 后重复发起同 uid 请求。
+    private requestChannelInfoIfNeeded = (friend: any) => {
+        if (!friend?.channel_id) return
+        const org = friend?.orgData ?? {}
+        const homeId: string | undefined = friend?.home_space_id ?? org.home_space_id
+        const isExternalLegacy: number | undefined =
+            friend?.is_external ?? org.is_external
+        const missingHome = !homeId
+        const missingLegacy =
+            isExternalLegacy === undefined || isExternalLegacy === null
+        if (!(missingHome && missingLegacy)) return
+        if (this.fetchedUids.has(friend.channel_id)) return
+        const ch = new Channel(friend.channel_id, ChannelTypePerson)
+        if (WKSDK.shared().channelManager.getChannelInfo(ch)) return
+        this.fetchedUids.add(friend.channel_id)
+        WKSDK.shared().channelManager.fetchChannelInfo(ch)
     }
 
     /**
@@ -50,6 +80,8 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
      * home_space_id / home_space_name / is_external / source_space_name 字段；
      * 缺失时回落到 channelInfo.orgData，同 @Mention 候选、成员列表保持一致。
      * 返回空字符串表示同 Space / 非外部 / 信息不足，上层不渲染后缀。
+     * 该方法现为纯函数：不再主动触发 fetchChannelInfo。按需拉取逻辑由
+     * requestChannelInfoIfNeeded 在 VisibilityTrigger 进入视口时处理。
      */
     private resolveSourceSpaceName(friend: any): string {
         const org = friend?.orgData ?? {}
@@ -59,7 +91,7 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
         let sourceNameLegacy: string | undefined =
             friend?.source_space_name ?? org.source_space_name
 
-        // 回落：friend 顶层与 orgData 都没有外部字段时，从已缓存的 channelInfo 取
+        // 回落：friend 顶层与 orgData 都没有外部字段时，读已缓存的 channelInfo
         const missingHome = !homeId
         const missingLegacy =
             isExternalLegacy === undefined || isExternalLegacy === null
@@ -68,19 +100,15 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
             const ci = WKSDK.shared().channelManager.getChannelInfo(ch)
             const ciOrg = ci?.orgData
             if (ciOrg) {
-                // homeId / isExternalLegacy 此时由 missingHome / missingLegacy 判据保证
-                // 必然 falsy 或 undefined，直接赋值即可；homeName / sourceNameLegacy
-                // 可能已从 friend 顶层或 orgData 取到，保留 ?? 兜底。
                 homeId = ciOrg.home_space_id as string | undefined
                 homeName = homeName ?? (ciOrg.home_space_name as string | undefined)
                 isExternalLegacy = ciOrg.is_external as number | undefined
                 sourceNameLegacy =
                     sourceNameLegacy ??
                     (ciOrg.source_space_name as string | undefined)
-            } else {
-                // 异步拉一次，channelInfo 返回后 componentDidMount 的 listener 会 forceUpdate
-                WKSDK.shared().channelManager.fetchChannelInfo(ch)
             }
+            // 缓存未命中：保持 sourceSpaceName="" 由 VisibilityTrigger 按需拉取后
+            // 走 channelInfoListener → forceUpdate 补上，不在 render 中产生副作用
         }
 
         const { isExternal, sourceSpaceName } = resolveExternalForViewer({
@@ -93,9 +121,17 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
     }
 
     render(): ReactNode {
+        // friends undefined 时保持上次值，避免 tab 切换中途父层清空 searchResult
+        // 导致列表 DOM 被销毁、头像 <img> 重挂发起重复请求。
+        // 空数组（搜索无结果）视为有效数据，照常清空列表。
+        const incoming = this.props.friends
+        if (incoming !== undefined) {
+            this.stickyFriends = incoming
+        }
+        const friends = this.stickyFriends
         return <div className="wk-tab-contacts">
             {
-                this.props.friends?.map((item: any) => {
+                friends?.map((item: any) => {
                     // YUJ-138 follow-up: 用 local displayName 替代对 item.channel_name 的 mutation。
                     // 之前直接改 item.channel_name（props / 源数据）会在 listener 触发 re-render
                     // 后累积成 <mark><mark>key</mark></mark>（double-wrap），sanitizeHighlight
@@ -109,23 +145,27 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
                     }
                     // YUJ-138: 跨 Space 搜索联系人时展示来源 Space，避免误选外部成员
                     const sourceSpaceName = this.resolveSourceSpaceName(item)
-                    return <ItemContacts
-                    key={item.channel_id}
-                    name={displayName}
-                    avatar={WKApp.shared.avatarUser(item.channel_id)}
-                    isBot={isBot(item.channel_id)}
-                    sourceSpaceName={sourceSpaceName}
-                    onClick={()=>{
-                        // #106: Bot 搜索结果点击弹名片
-                        if (isBot(item.channel_id)) {
-                            this.setState({ botDetailUid: item.channel_id, botDetailVisible: true });
-                            return;
-                        }
-                        if(this.props.onClick) {
-                            this.props.onClick(item)
-                        }
-                    }}
-                    />
+                    return <VisibilityTrigger
+                        key={item.channel_id}
+                        onVisible={() => this.requestChannelInfoIfNeeded(item)}
+                    >
+                        <ItemContacts
+                            name={displayName}
+                            avatar={WKApp.shared.avatarUser(item.channel_id)}
+                            isBot={isBot(item.channel_id)}
+                            sourceSpaceName={sourceSpaceName}
+                            onClick={()=>{
+                                // #106: Bot 搜索结果点击弹名片
+                                if (isBot(item.channel_id)) {
+                                    this.setState({ botDetailUid: item.channel_id, botDetailVisible: true });
+                                    return;
+                                }
+                                if(this.props.onClick) {
+                                    this.props.onClick(item)
+                                }
+                            }}
+                        />
+                    </VisibilityTrigger>
                 })
             }
             <BotDetailModal

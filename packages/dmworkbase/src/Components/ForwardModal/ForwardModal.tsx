@@ -6,6 +6,7 @@ import { Tag } from "@douyinfe/semi-ui"
 import Checkbox from "../Checkbox"
 import AiBadge from "../AiBadge"
 import WKAvatar from "../WKAvatar"
+import VisibilityTrigger from "../VisibilityTrigger"
 import "./ForwardModal.css"
 
 export interface ForwardItem {
@@ -32,6 +33,8 @@ export interface ForwardModalProps {
   onToggleSelect: (item: ForwardItem) => void
   onConfirm: () => void
   onCancel?: () => void
+  /** 懒加载：列表项进入视口时调用。未传则不触发懒加载（用于不需要拉 channelInfo 的场景） */
+  onItemVisible?: (item: ForwardItem) => void
 }
 
 // ─── 左列：可选列表项 ───────────────────────────────────────────
@@ -54,7 +57,7 @@ function ItemRow({ item, selected, onToggle }: ItemRowProps) {
         onCheck={() => {}}
       />
       <div className="wk-fm-avatar-wrap">
-        <WKAvatar channel={channel} />
+        <WKAvatar channel={channel} lazy />
       </div>
       <span className="wk-fm-item-name">{item.displayName}</span>
       {item.channelType === ChannelTypeGroup && item.isExternal && (
@@ -83,7 +86,7 @@ function SelectedRow({ item, onRemove }: SelectedRowProps) {
   return (
     <div className="wk-fm-selected-item">
       <div className="wk-fm-avatar-wrap">
-        <WKAvatar channel={channel} />
+        <WKAvatar channel={channel} lazy />
       </div>
       <span className="wk-fm-item-name">{item.displayName}</span>
       <button
@@ -113,6 +116,7 @@ export function ForwardModal({
   onToggleSelect,
   onConfirm,
   onCancel,
+  onItemVisible,
 }: ForwardModalProps) {
   const selectedSet = new Set(selectedIDs)
   const sourceForSelected = allItems ?? items
@@ -156,14 +160,26 @@ export function ForwardModal({
             ) : items.length === 0 ? (
               <div className="wk-fm-empty">暂无联系人</div>
             ) : (
-              items.map((item) => (
-                <ItemRow
-                  key={item.channelID}
-                  item={item}
-                  selected={selectedSet.has(item.channelID)}
-                  onToggle={onToggleSelect}
-                />
-              ))
+              items.map((item) => {
+                const row = (
+                  <ItemRow
+                    item={item}
+                    selected={selectedSet.has(item.channelID)}
+                    onToggle={onToggleSelect}
+                  />
+                )
+                if (onItemVisible) {
+                  return (
+                    <VisibilityTrigger
+                      key={item.channelID}
+                      onVisible={() => onItemVisible(item)}
+                    >
+                      {row}
+                    </VisibilityTrigger>
+                  )
+                }
+                return <React.Fragment key={item.channelID}>{row}</React.Fragment>
+              })
             )}
           </div>
         </div>

@@ -4,10 +4,11 @@ import Section from "./section";
 import ItemMessage from "./item-message";
 import WKApp from "../../App";
 import "./tab-all.css"
-import WKSDK, { Channel, ChannelTypePerson, MessageContentType } from "wukongimjssdk";
+import WKSDK, { Channel, ChannelInfo, ChannelInfoListener, ChannelTypePerson, MessageContentType } from "wukongimjssdk";
 import { MessageContentTypeConst } from "../../Service/Const";
-import { throttle } from "../../Utils/rateLimit";
+import { debounce, throttle } from "../../Utils/rateLimit";
 import { resolveExternalForViewer } from "../../Utils/externalViewer";
+import VisibilityTrigger from "../VisibilityTrigger";
 
 
 interface TabAllProps {
@@ -28,6 +29,36 @@ export default class TabAll extends Component<TabAllProps> {
             }
         }
     }, 100);
+
+    // 懒加载：仅视口内的消息才拉发送者 channelInfo。debounce 合批 forceUpdate，
+    // fetchedUids 防止同 uid 重复请求。
+    private _channelInfoListener!: ChannelInfoListener
+    private _forceUpdateDebounced = debounce(() => this.forceUpdate(), 150)
+    private fetchedUids = new Set<string>()
+
+    componentDidMount() {
+        this._channelInfoListener = (channelInfo: ChannelInfo) => {
+            if (channelInfo?.channel?.channelType === ChannelTypePerson) {
+                this._forceUpdateDebounced()
+            }
+        }
+        WKSDK.shared().channelManager.addListener(this._channelInfoListener)
+    }
+
+    componentWillUnmount() {
+        if (this._channelInfoListener) {
+            WKSDK.shared().channelManager.removeListener(this._channelInfoListener)
+        }
+        this._forceUpdateDebounced.cancel()
+    }
+
+    private requestSenderChannelInfoIfNeeded = (fromUid: string) => {
+        if (!fromUid || this.fetchedUids.has(fromUid)) return
+        const senderChannel = new Channel(fromUid, ChannelTypePerson)
+        if (WKSDK.shared().channelManager.getChannelInfo(senderChannel)) return
+        this.fetchedUids.add(fromUid)
+        WKSDK.shared().channelManager.fetchChannelInfo(senderChannel)
+    }
 
     /**
      * YUJ-138: 计算一条搜索到的消息中「发送者相对当前查看 Space」的来源
@@ -105,13 +136,15 @@ export default class TabAll extends Component<TabAllProps> {
 
 
                                 let sender;
+                                let needFetchSender = false
                                 if (item.channel?.channel_type !== ChannelTypePerson && item.from_uid && item.from_uid !== "") {
                                     const senderChannel = new Channel(item.from_uid, ChannelTypePerson)
                                     const channelInfo = WKSDK.shared().channelManager.getChannelInfo(senderChannel)
                                     if (channelInfo) {
                                         sender = channelInfo.title
                                     } else {
-                                        WKSDK.shared().channelManager.fetchChannelInfo(senderChannel)
+                                        // 懒加载：进入视口时再发，由 VisibilityTrigger 触发
+                                        needFetchSender = true
                                     }
                                 }
 
@@ -119,19 +152,28 @@ export default class TabAll extends Component<TabAllProps> {
                                 const senderSourceSpaceName =
                                     this.resolveMessageSenderSourceSpaceName(item)
 
-                                return <ItemMessage
-                                key={item.message_idstr}
-                                sender={sender}
-                                senderSourceSpaceName={senderSourceSpaceName}
-                                digest={digest}
-                                name={item.channel?.channel_name}
-                                avatar={WKApp.shared.avatarChannel(new Channel(item.channel?.channel_id, item.channel?.channel_type))}
-                                onClick={() => {
-                                    if (this.props.onClick) {
-                                        this.props.onClick(item, "message")
-                                    }
-                                }}
+                                const messageNode = <ItemMessage
+                                    sender={sender}
+                                    senderSourceSpaceName={senderSourceSpaceName}
+                                    digest={digest}
+                                    name={item.channel?.channel_name}
+                                    avatar={WKApp.shared.avatarChannel(new Channel(item.channel?.channel_id, item.channel?.channel_type))}
+                                    onClick={() => {
+                                        if (this.props.onClick) {
+                                            this.props.onClick(item, "message")
+                                        }
+                                    }}
                                 />
+
+                                if (needFetchSender) {
+                                    return <VisibilityTrigger
+                                        key={item.message_idstr}
+                                        onVisible={() => this.requestSenderChannelInfoIfNeeded(item.from_uid)}
+                                    >
+                                        {messageNode}
+                                    </VisibilityTrigger>
+                                }
+                                return <React.Fragment key={item.message_idstr}>{messageNode}</React.Fragment>
                             })
                         }
                     </Section>

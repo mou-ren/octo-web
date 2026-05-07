@@ -30,7 +30,7 @@ export default class ItemMessage extends Component<ItemMessageProps> {
                 this.props.onClick()
             }
         } }>
-            <WKAvatar src={this.props.avatar} style={{ width: "40px", height: "40px" }}></WKAvatar>
+            <WKAvatar src={this.props.avatar} style={{ width: "40px", height: "40px" }} lazy></WKAvatar>
             <div className="wk-item-message-content">
                 <div className="wk-item-message-name">{this.props.name}</div>
                 {/* <div className="wk-item-message-time">{this.props.time}</div> */}
