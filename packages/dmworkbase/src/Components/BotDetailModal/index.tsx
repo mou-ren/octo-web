@@ -55,8 +55,8 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
         editingDescription: false,
         descriptionDraft: "",
         savingDescription: false,
-        // Mock 显示：后端接口未 ready，暂时固定为 "managed_unreported"
-        octopushStatus: "managed_unreported",
+        // Mock 显示：后端接口未 ready，暂时固定为 "reported"（已上报）
+        octopushStatus: "reported",
     };
 
     componentDidMount() {
@@ -100,8 +100,8 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
             editingDescription: false,
             descriptionDraft: "",
             savingDescription: false,
-            // Mock 显示：后端接口未 ready，暂时固定为 "managed_unreported"
-            octopushStatus: "managed_unreported",
+            // Mock 显示：后端接口未 ready，暂时固定为 "reported"（已上报）
+            octopushStatus: "reported",
         });
 
         const isStale = () => this.props.uid !== requestedUid;
@@ -120,9 +120,9 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
                 botCommands: data.bot_commands || "",
                 isFriend: data.follow === 1,
                 editingDescription: false,
-                // Mock 显示：后端接口未 ready，暂时固定为 "managed_unreported"
+                // Mock 显示：后端接口未 ready，暂时固定为 "reported"（已上报）
                 // TODO: 后端接口 ready 后，改为 data.octopush_status || "unmanaged"
-                octopushStatus: "managed_unreported",
+                octopushStatus: "reported",
             });
         } catch {
             // fallback to channel info
@@ -141,9 +141,9 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
                     botCommands: channelInfo?.orgData?.bot_commands || "",
                     isFriend: channelInfo?.orgData?.follow === 1,
                     editingDescription: false,
-                    // Mock 显示：后端接口未 ready，暂时固定为 "managed_unreported"
+                    // Mock 显示：后端接口未 ready，暂时固定为 "reported"（已上报）
                     // TODO: 后端接口 ready 后，改为 channelInfo?.orgData?.octopush_status || "unmanaged"
-                    octopushStatus: "managed_unreported",
+                    octopushStatus: "reported",
                 });
             } catch {
                 if (isStale()) return;
@@ -159,8 +159,8 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
                     botCommands: "",
                     isFriend: false,
                     editingDescription: false,
-                    // Mock 显示：后端接口未 ready，暂时固定为 "managed_unreported"
-                    octopushStatus: "managed_unreported",
+                    // Mock 显示：后端接口未 ready，暂时固定为 "reported"（已上报）
+                    octopushStatus: "reported",
                 });
             }
         }
