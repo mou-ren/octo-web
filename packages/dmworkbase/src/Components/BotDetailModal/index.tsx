@@ -6,6 +6,7 @@ import { Channel, ChannelTypePerson, WKSDK } from "wukongimjssdk";
 import WKApp from "../../App";
 import WKAvatar from "../WKAvatar";
 import AiBadge from "../AiBadge";
+import ClawInfoModal from "../ClawInfoModal/ClawInfoModal";
 import "./index.css";
 
 interface BotDetailModalProps {
@@ -33,6 +34,7 @@ interface BotDetailModalState {
     savingDescription: boolean;
     // Mock 显示：后端接口未 ready，暂时固定为 "managed_unreported"
     octopushStatus: "reported" | "managed_unreported" | "unmanaged";
+    showClawInfo: boolean;
 }
 
 export default class BotDetailModal extends Component<BotDetailModalProps, BotDetailModalState> {
@@ -57,6 +59,7 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
         savingDescription: false,
         // Mock 显示：后端接口未 ready，暂时固定为 "reported"（已上报）
         octopushStatus: "reported",
+        showClawInfo: false,
     };
 
     componentDidMount() {
@@ -294,9 +297,7 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
     };
 
     handleViewClawInfo = () => {
-        // TODO: 打开龙虾详情弹窗（ClawInfoModal）
-        // 暂时显示 Toast，后续集成真实弹窗
-        Toast.info("龙虾详情功能开发中");
+        this.setState({ showClawInfo: true });
     };
 
     render() {
@@ -317,6 +318,7 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
             descriptionDraft,
             savingDescription,
             octopushStatus,
+            showClawInfo,
         } = this.state;
         const isOwner = this.isOwner();
 
@@ -326,6 +328,7 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
         } catch {}
 
         return (
+            <>
             <WKModal
                 title={null}
                 visible={visible}
@@ -512,6 +515,12 @@ export default class BotDetailModal extends Component<BotDetailModalProps, BotDe
                     </div>
                 )}
             </WKModal>
+            <ClawInfoModal
+                botId={uid}
+                visible={showClawInfo}
+                onClose={() => this.setState({ showClawInfo: false })}
+            />
+        </>
         );
     }
 }
