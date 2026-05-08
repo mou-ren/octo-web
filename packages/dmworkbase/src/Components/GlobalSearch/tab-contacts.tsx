@@ -1,5 +1,6 @@
 import React, { Component } from "react";
 import { ReactNode } from "react";
+import { Virtuoso } from "react-virtuoso";
 import ItemContacts from "./item-contacts";
 import WKApp from "../../App";
 import { isBot } from "../WKAvatar";
@@ -7,7 +8,6 @@ import BotDetailModal from "../BotDetailModal";
 import WKSDK, { Channel, ChannelInfo, ChannelInfoListener, ChannelTypePerson } from "wukongimjssdk";
 import { resolveExternalForViewer } from "../../Utils/externalViewer";
 import { debounce } from "../../Utils/rateLimit";
-import VisibilityTrigger from "../VisibilityTrigger";
 import "./tab-contacts.css"
 
 interface TabContactsProps {
@@ -81,7 +81,7 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
      * 缺失时回落到 channelInfo.orgData，同 @Mention 候选、成员列表保持一致。
      * 返回空字符串表示同 Space / 非外部 / 信息不足，上层不渲染后缀。
      * 该方法现为纯函数：不再主动触发 fetchChannelInfo。按需拉取逻辑由
-     * requestChannelInfoIfNeeded 在 VisibilityTrigger 进入视口时处理。
+     * requestChannelInfoIfNeeded 在 Virtuoso 渲染视口内 item 时处理。
      */
     private resolveSourceSpaceName(friend: any): string {
         const org = friend?.orgData ?? {}
@@ -107,8 +107,9 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
                     sourceNameLegacy ??
                     (ciOrg.source_space_name as string | undefined)
             }
-            // 缓存未命中：保持 sourceSpaceName="" 由 VisibilityTrigger 按需拉取后
-            // 走 channelInfoListener → forceUpdate 补上，不在 render 中产生副作用
+            // 缓存未命中：保持 sourceSpaceName="" 由 Virtuoso 渲染视口 item 时
+            // 触发 requestChannelInfoIfNeeded → channelInfoListener → forceUpdate
+            // 补上，不在 render 中产生副作用
         }
 
         const { isExternal, sourceSpaceName } = resolveExternalForViewer({
@@ -128,46 +129,15 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
         if (incoming !== undefined) {
             this.stickyFriends = incoming
         }
-        const friends = this.stickyFriends
+        const friends = this.stickyFriends ?? []
         return <div className="wk-tab-contacts">
-            {
-                friends?.map((item: any) => {
-                    // YUJ-138 follow-up: 用 local displayName 替代对 item.channel_name 的 mutation。
-                    // 之前直接改 item.channel_name（props / 源数据）会在 listener 触发 re-render
-                    // 后累积成 <mark><mark>key</mark></mark>（double-wrap），sanitizeHighlight
-                    // 虽然 escape 但视觉退化。保留源数据干净，仅渲染时替换。
-                    let displayName: string = item.channel_name
-                    if (this.props.keyword && item.channel_name.indexOf(this.props.keyword) !== -1) {
-                        displayName = item.channel_name.replace(
-                            this.props.keyword,
-                            `<mark>${this.props.keyword}</mark>`
-                        )
-                    }
-                    // YUJ-138: 跨 Space 搜索联系人时展示来源 Space，避免误选外部成员
-                    const sourceSpaceName = this.resolveSourceSpaceName(item)
-                    return <VisibilityTrigger
-                        key={item.channel_id}
-                        onVisible={() => this.requestChannelInfoIfNeeded(item)}
-                    >
-                        <ItemContacts
-                            name={displayName}
-                            avatar={WKApp.shared.avatarUser(item.channel_id)}
-                            isBot={isBot(item.channel_id)}
-                            sourceSpaceName={sourceSpaceName}
-                            onClick={()=>{
-                                // #106: Bot 搜索结果点击弹名片
-                                if (isBot(item.channel_id)) {
-                                    this.setState({ botDetailUid: item.channel_id, botDetailVisible: true });
-                                    return;
-                                }
-                                if(this.props.onClick) {
-                                    this.props.onClick(item)
-                                }
-                            }}
-                        />
-                    </VisibilityTrigger>
-                })
-            }
+            <Virtuoso
+                style={{ height: "100%" }}
+                data={friends}
+                // 视口外保留 200px，滚动时少闪；语义与原 VisibilityTrigger rootMargin "100px 0px" 相当
+                increaseViewportBy={200}
+                itemContent={(_index, item) => this.renderItem(item)}
+            />
             <BotDetailModal
                 uid={this.state.botDetailUid}
                 visible={this.state.botDetailVisible}
@@ -178,5 +148,40 @@ export default class TabContacts extends Component<TabContactsProps, TabContacts
                 }}
             />
         </div>
+    }
+
+    private renderItem(item: any): ReactNode {
+        // YUJ-138 follow-up: 用 local displayName 替代对 item.channel_name 的 mutation。
+        // 之前直接改 item.channel_name（props / 源数据）会在 listener 触发 re-render
+        // 后累积成 <mark><mark>key</mark></mark>（double-wrap），sanitizeHighlight
+        // 虽然 escape 但视觉退化。保留源数据干净，仅渲染时替换。
+        let displayName: string = item.channel_name
+        if (this.props.keyword && item.channel_name.indexOf(this.props.keyword) !== -1) {
+            displayName = item.channel_name.replace(
+                this.props.keyword,
+                `<mark>${this.props.keyword}</mark>`
+            )
+        }
+        // Virtuoso 只渲染视口内 item，等价于懒挂载；进入视口时按需触发 channelInfo 拉取。
+        // fetchedUids 去重避免 forceUpdate / 重入导致重复请求。
+        this.requestChannelInfoIfNeeded(item)
+        // YUJ-138: 跨 Space 搜索联系人时展示来源 Space，避免误选外部成员
+        const sourceSpaceName = this.resolveSourceSpaceName(item)
+        return <ItemContacts
+            name={displayName}
+            avatar={WKApp.shared.avatarUser(item.channel_id)}
+            isBot={isBot(item.channel_id)}
+            sourceSpaceName={sourceSpaceName}
+            onClick={() => {
+                // #106: Bot 搜索结果点击弹名片
+                if (isBot(item.channel_id)) {
+                    this.setState({ botDetailUid: item.channel_id, botDetailVisible: true });
+                    return;
+                }
+                if (this.props.onClick) {
+                    this.props.onClick(item)
+                }
+            }}
+        />
     }
 }
