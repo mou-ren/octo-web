@@ -338,9 +338,14 @@ export class Conversation
         task instanceof MessageTask &&
         clientSeq !== null &&
         task.message.clientSeq === clientSeq &&
-        task.status === TaskStatus.fail
+        (task.status === TaskStatus.success || task.status === TaskStatus.fail)
       ) {
-        done();
+        // 上传完成（成功或失败）：ack 应很快到达，由 ackListener 触发 done()。
+        // 但如果 ack 已经在 pendingAcks 中或 message.status 已更新，直接 done()。
+        if (task.status === TaskStatus.fail) {
+          done();
+        }
+        // success: 不立即 done()，让 ackListener 来，确保 messageSeq 已写入 order
       }
     };
     WKSDK.shared().taskManager.addListener(taskListener);
@@ -363,7 +368,7 @@ export class Conversation
     try {
       message = await this.sendMessage(content, channel);
     } catch (err) {
-      done(); // 清理 listener 和 timer
+      done();
       throw err;
     }
     clientSeq = message.clientSeq;
@@ -371,22 +376,10 @@ export class Conversation
     // sendMessage 返回后主动检查
     if (!settled) {
       // 检查暂存的 ack（ack 在 clientSeq 赋值前到达的情况）
-      if (pendingAcks.some(p => p.clientSeq === clientSeq)) {
+      const found = pendingAcks.some(p => p.clientSeq === clientSeq);
+      pendingAcks = []; // 立即释放无关 ack 引用
+      if (found) {
         done();
-      }
-      // 检查 task 是否已 fail
-      if (!settled) {
-        try {
-          const taskMap = (WKSDK.shared().taskManager as any).taskMap as
-            | Map<string, any>
-            | undefined;
-          const existingTask = taskMap?.get(message.clientMsgNo);
-          if (existingTask && existingTask.status === TaskStatus.fail) {
-            done();
-          }
-        } catch {
-          // SDK 内部结构变更时不 crash
-        }
       }
       // 最终 fallback：检查 message.status（VM 可能已经处理了 ack）
       if (!settled && (message.status === MessageStatus.Normal || message.status === MessageStatus.Fail)) {
@@ -455,7 +448,9 @@ export class Conversation
 
     // fallback：检查暂存的 ack 或已处理的 status
     if (!settled) {
-      if (pendingAcks.some(p => p.clientSeq === clientSeq)) {
+      const found = pendingAcks.some(p => p.clientSeq === clientSeq);
+      pendingAcks = []; // 立即释放无关 ack 引用
+      if (found) {
         done();
       }
       if (!settled && (message.status === MessageStatus.Normal || message.status === MessageStatus.Fail)) {
