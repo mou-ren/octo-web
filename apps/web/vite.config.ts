@@ -8,7 +8,7 @@ import commonjs from 'vite-plugin-commonjs'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const apiUrl = env.VITE_API_URL
-  
+
   // 提取 origin
   let apiOrigin: string
   if (!apiUrl) {
@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       throw new Error(`[vite] VITE_API_URL format is invalid: "${apiUrl}". Please use full URL, e.g. https://api.example.com`)
     }
   }
-  
+
   return {
     plugins: [
       // 在 HTML <head> 注入 <meta name="app-version">，供构建后验证版本号是否正确写入
@@ -61,12 +61,12 @@ export default defineConfig(({ mode }) => {
             '@storybook/addon-vitest',
             '@storybook/test',
           ]
-          
+
           const isTestFile = TEST_FILE_RE.test(id)
-          const isTestPackage = TEST_PACKAGES.some(pkg => 
+          const isTestPackage = TEST_PACKAGES.some(pkg =>
             id === pkg || id.startsWith(pkg) || id.includes(`/node_modules/${pkg}`)
           )
-          
+
           if (isTestFile || isTestPackage) {
             return '\0vitest-stub'
           }
@@ -81,7 +81,7 @@ export default defineConfig(({ mode }) => {
             const url = req.url || ''
             const TEST_URL_RE = /\/(vitest|expect-type|@vitest\/|@storybook\/(addon-vitest|test))\//
             const TEST_FILE_URL_RE = /\.(test|spec)\.[jt]sx?|__tests__\//
-            
+
             if (TEST_URL_RE.test(url) || TEST_FILE_URL_RE.test(url)) {
               res.statusCode = 200
               res.setHeader('Content-Type', 'application/javascript')
@@ -118,7 +118,7 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_MATTER_API_URL || env.VITE_TODO_API_URL || apiOrigin,
           changeOrigin: true,
           secure: false,
-          rewrite: (path: string) => path.replace(/^\/matter/, ''),
+          // 不做 rewrite — 后端实际路径就是 /matter/api/v1/*
         },
         '/api/': {
           target: apiOrigin,
