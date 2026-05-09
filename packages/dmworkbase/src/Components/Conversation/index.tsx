@@ -1763,9 +1763,13 @@ export class Conversation
                         Toast.error("请先选择消息！");
                         return;
                       }
-                      // 交给 dmworktodo 模块接管（渲染 MatterLinkMenu、处理关联流程）
-                      // TODO(interaction): 后续把 checkedMsgs 也传过去用于 PRD §4.1 多选关联
-                      WKApp.mittBus.emit("wk:open-matter-link-menu", { anchor });
+                      // 传 channel 信息给 MatterLinkMenu，用于按 channel 查询关联的 Matter
+                      const ch = this.props.channel;
+                      WKApp.mittBus.emit("wk:open-matter-link-menu", {
+                        anchor,
+                        channelId: ch.channelID,
+                        channelType: ch.channelType,
+                      });
                     }}
                   ></MultiplePanel>
 

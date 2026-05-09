@@ -8,7 +8,7 @@ import MatterPage from './pages/TodoPage';
 import ChatMatterPanel from './panel/ChatTodoPanel';
 import MatterDetailPanel from './panel/MatterDetailPanel';
 import MatterLinkMenu from './ui/MatterLinkMenu';
-import { createMatter } from './api/todoApi';
+import { createMatter, listMatters } from './api/todoApi';
 import { Toast } from './utils/toast';
 import CreateTaskModal from './ui/CreateTaskModal';
 import './ui/tokens.css';
@@ -404,32 +404,53 @@ function mountGlobalMatterLinkMenu() {
 
 function GlobalMatterLinkMenu() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [channelId, setChannelId] = useState<string>('');
+  const [channelType, setChannelType] = useState<number>(0);
+  const [matters, setMatters] = useState<{ id: string; title: string }[]>([]);
+  const [loading, setLoading] = useState(false);
   const anchorRef = React.useRef<HTMLElement | null>(null);
 
-  // 用 ref 挂 anchor，同时用 state 触发 re-render
   React.useEffect(() => {
     anchorRef.current = anchor;
   }, [anchor]);
 
   useEffect(() => {
-    const handler = (data: { anchor: HTMLElement }) => {
-      // 切换：同一 anchor 再次点击则关闭
-      setAnchor((prev) => (prev === data.anchor ? null : data.anchor));
+    const handler = (data: { anchor: HTMLElement; channelId: string; channelType: number }) => {
+      if (anchor === data.anchor) {
+        // 同一按钮再次点击 → 关闭
+        setAnchor(null);
+        return;
+      }
+      setAnchor(data.anchor);
+      setChannelId(data.channelId);
+      setChannelType(data.channelType);
+      // 按 channel 查询关联的 Matter 列表
+      setLoading(true);
+      listMatters({ source_channel_id: data.channelId, source_channel_type: data.channelType, limit: 20 })
+        .then((res) => {
+          setMatters(res.data.map((m) => ({ id: m.id, title: m.title })));
+        })
+        .catch(() => {
+          setMatters([]);
+        })
+        .finally(() => setLoading(false));
     };
     WKApp.mittBus.on('wk:open-matter-link-menu', handler);
     return () => {
       WKApp.mittBus.off('wk:open-matter-link-menu', handler);
     };
-  }, []);
+  }, [anchor]);
 
   if (!anchor) return null;
 
   return (
     <MatterLinkMenu
       anchorRef={anchorRef}
+      matters={matters}
       onClose={() => setAnchor(null)}
-      // onCreate / onPick 暂未接入 — 占位阶段所有选项 disabled
-      disabled
+      // TODO(interaction): onCreate → 打开 SmartCreateModal
+      // TODO(interaction): onPick → 调 linkChannel API 关联选中消息到 Matter
+      disabled={loading}
     />
   );
 }
