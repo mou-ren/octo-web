@@ -129,6 +129,8 @@ export default class MatterModule implements IModule {
     mountGlobalMatterModal();
     // Mount global MatterLinkMenu portal (handles "添加到事项" button from MultiplePanel)
     mountGlobalMatterLinkMenu();
+    // Mount global SmartCreateModal portal (handles "创建新事项" from MultiplePanel etc.)
+    mountGlobalSmartCreateModal();
 
     // Chat integration
     this.registerChatContextMenu();
@@ -470,5 +472,53 @@ function GlobalMatterLinkMenu() {
         channel={channelId ? { channelId, channelType } : undefined}
       />
     </>
+  );
+}
+
+/* ============================================================
+ * Global SmartCreateModal — 响应 'wk:open-smart-create-modal' 事件
+ * 由 MultiplePanel "创建新事项" 按钮触发
+ * ============================================================ */
+let _globalSmartCreateMounted = false;
+let _globalSmartCreateRoot: ReturnType<typeof ReactDOM.createRoot> | null = null;
+
+function mountGlobalSmartCreateModal() {
+  if (_globalSmartCreateMounted) return;
+  _globalSmartCreateMounted = true;
+  const container = document.createElement('div');
+  container.id = 'smart-create-modal-root';
+  document.body.appendChild(container);
+  _globalSmartCreateRoot = ReactDOM.createRoot(container);
+  _globalSmartCreateRoot.render(<GlobalSmartCreateModal />);
+}
+
+function GlobalSmartCreateModal() {
+  const [open, setOpen] = useState(false);
+  const [channel, setChannel] = useState<{ channelId: string; channelType: number } | undefined>();
+
+  useEffect(() => {
+    const handler = (data?: { channelId?: string; channelType?: number }) => {
+      if (data?.channelId) {
+        setChannel({ channelId: data.channelId, channelType: data.channelType || 0 });
+      }
+      setOpen(true);
+    };
+    WKApp.mittBus.on('wk:open-smart-create-modal', handler);
+    return () => {
+      WKApp.mittBus.off('wk:open-smart-create-modal', handler);
+    };
+  }, []);
+
+  return (
+    <SmartCreateModal
+      visible={open}
+      blank
+      onClose={() => setOpen(false)}
+      onConfirm={async (req) => {
+        await createMatter(req);
+        Toast.success('事项已创建');
+      }}
+      channel={channel}
+    />
   );
 }

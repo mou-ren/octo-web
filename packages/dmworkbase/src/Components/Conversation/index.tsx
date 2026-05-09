@@ -2523,7 +2523,7 @@ class MultiplePanel extends Component<MultiplePanelProps> {
         <button
           className="wk-multiplepanel-btn wk-multiplepanel-btn--matter"
           onClick={() => {
-            // TODO(interaction): 打开 SmartCreateModal，传入选中消息
+            WKApp.mittBus.emit('wk:open-smart-create-modal', {});
           }}
           title="创建新事项"
         >
