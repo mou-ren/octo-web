@@ -50,17 +50,44 @@ export default function MatterDetailPanel({
 
   // Timeline
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const [expandedTimelines, setExpandedTimelines] = useState<Set<string>>(
     new Set(),
   );
-  const toggleTimeline = useCallback((chId: string) => {
-    setExpandedTimelines((prev) => {
-      const next = new Set(prev);
-      if (next.has(chId)) next.delete(chId);
-      else next.add(chId);
-      return next;
-    });
-  }, []);
+  // 拉取 timeline (matter 加载时 + 每次展开时都调, 保证数据新鲜)。
+  // 后端 GET /matters/:id/timeline 不支持按 channel 过滤, 返回整个 Matter
+  // 下的全量 timeline, 前端按 entry.channel_id 本地分配到各 channel 卡片。
+  const loadTimeline = useCallback(async () => {
+    if (!matterId) {
+      setTimeline([]);
+      return;
+    }
+    setTimelineLoading(true);
+    try {
+      const res = await listTimeline(matterId, { limit: 50 });
+      setTimeline(res.data || []);
+    } catch {
+      setTimeline([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [matterId]);
+  const toggleTimeline = useCallback(
+    (chId: string) => {
+      setExpandedTimelines((prev) => {
+        const next = new Set(prev);
+        if (next.has(chId)) {
+          next.delete(chId);
+        } else {
+          next.add(chId);
+          // 每次展开时重新拉, 避免 matter 加载后新产生的 timeline 看不到
+          loadTimeline();
+        }
+        return next;
+      });
+    },
+    [loadTimeline],
+  );
   const [linkModalOpen, setLinkModalOpen] = useState(false);
 
   // Fetch matter
@@ -80,16 +107,10 @@ export default function MatterDetailPanel({
       .finally(() => setLoading(false));
   }, [matterId, channelId]);
 
-  // Fetch timeline when matter loads
+  // Fetch timeline when matter loads. 展开时还会再拉一次 (loadTimeline)。
   useEffect(() => {
-    if (!matterId) {
-      setTimeline([]);
-      return;
-    }
-    listTimeline(matterId, { limit: 50 })
-      .then((res) => setTimeline(res.data || []))
-      .catch(() => setTimeline([]));
-  }, [matterId]);
+    loadTimeline();
+  }, [loadTimeline]);
 
   // ── Handlers ──
 
@@ -494,43 +515,58 @@ export default function MatterDetailPanel({
                       暂无进展摘要（等待一键总结）
                     </div>
                   </div>
-                  {/* 展开时间线 */}
-                  {timeline.length > 0 && (
-                    <div className="wk-mp-channels__card-actions">
-                      <button
-                        type="button"
-                        className="wk-mp-channels__timeline-btn"
-                        onClick={() => toggleTimeline(ch.channel_id)}
+                  {/* 展开时间线: 按钮常显, 点击时 toggle 并 refetch。
+                      不再用 timeline.length > 0 做 gate, 否则空数据时
+                      用户连触发刷新的入口都没有 */}
+                  <div className="wk-mp-channels__card-actions">
+                    <button
+                      type="button"
+                      className="wk-mp-channels__timeline-btn"
+                      onClick={() => toggleTimeline(ch.channel_id)}
+                    >
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        style={{
+                          transform: expandedTimelines.has(ch.channel_id)
+                            ? "rotate(180deg)"
+                            : "none",
+                          transition: "transform 0.15s",
+                        }}
                       >
-                        <svg
-                          width="10"
-                          height="10"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          style={{
-                            transform: expandedTimelines.has(ch.channel_id)
-                              ? "rotate(180deg)"
-                              : "none",
-                            transition: "transform 0.15s",
-                          }}
-                        >
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                        {expandedTimelines.has(ch.channel_id)
-                          ? "收起时间线"
-                          : "展开时间线"}
-                      </button>
-                    </div>
-                  )}
-                  {expandedTimelines.has(ch.channel_id) && (
-                    <TimelinePanel
-                      entries={timeline.filter(
-                        (e) => e.channel_id === ch.channel_id || !e.channel_id,
-                      )}
-                    />
-                  )}
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                      {expandedTimelines.has(ch.channel_id)
+                        ? "收起时间线"
+                        : "展开时间线"}
+                    </button>
+                  </div>
+                  {expandedTimelines.has(ch.channel_id) &&
+                    (() => {
+                      const chEntries = timeline.filter(
+                        (e) =>
+                          e.channel_id === ch.channel_id || !e.channel_id,
+                      );
+                      if (timelineLoading && chEntries.length === 0) {
+                        return (
+                          <div className="wk-mp-empty-tab">
+                            正在加载时间线...
+                          </div>
+                        );
+                      }
+                      if (chEntries.length === 0) {
+                        return (
+                          <div className="wk-mp-empty-tab">
+                            本群暂无时间线记录
+                          </div>
+                        );
+                      }
+                      return <TimelinePanel entries={chEntries} />;
+                    })()}
                 </div>
               ))
             )}
