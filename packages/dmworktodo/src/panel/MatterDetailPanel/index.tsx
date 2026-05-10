@@ -1405,6 +1405,19 @@ function ActivityPanel({ matterId }: { matterId: string }) {
   const [activities, setActivities] = useState<MatterActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortNewest, setSortNewest] = useState(true);
+  const [filter, setFilter] = useState("all");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const close = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node))
+        setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [filterOpen]);
 
   useEffect(() => {
     let aborted = false;
@@ -1426,22 +1439,44 @@ function ActivityPanel({ matterId }: { matterId: string }) {
     };
   }, [matterId]);
 
-  const sorted = [...activities].sort((a, b) => {
+  const filtered =
+    filter === "all"
+      ? activities
+      : activities.filter((a) => a.action === filter);
+  const sorted = [...filtered].sort((a, b) => {
     const ta = new Date(a.created_at).getTime();
     const tb = new Date(b.created_at).getTime();
     return sortNewest ? tb - ta : ta - tb;
   });
 
+  const FILTER_OPTIONS = [
+    { id: "all", label: "全部类型" },
+    { id: "created", label: "创建" },
+    { id: "title_changed", label: "标题变更" },
+    { id: "description_changed", label: "目标变更" },
+    { id: "deadline_changed", label: "DDL 变更" },
+    { id: "status_changed", label: "状态变更" },
+    { id: "channel_linked", label: "关联群变更" },
+    { id: "channel_unlinked", label: "关联群变更" },
+  ];
+  const currentFilter =
+    FILTER_OPTIONS.find((o) => o.id === filter) || FILTER_OPTIONS[0];
+
   return (
     <div className="wk-mp-tl">
-      <div className="wk-mp-tl__header">
-        <span className="wk-mp-tl__title">变更记录</span>
+      {/* Header: 排序 + 筛选 */}
+      <div className="wk-mp-activity__toolbar">
         <div className="wk-mp-tl__sort-group">
           <button
             type="button"
             className={`wk-mp-tl__sort-btn${sortNewest ? " is-active" : ""}`}
             onClick={() => setSortNewest(true)}
           >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="15" y2="12" />
+              <line x1="3" y1="18" x2="9" y2="18" />
+            </svg>
             最新在上
           </button>
           <button
@@ -1449,31 +1484,80 @@ function ActivityPanel({ matterId }: { matterId: string }) {
             className={`wk-mp-tl__sort-btn${!sortNewest ? " is-active" : ""}`}
             onClick={() => setSortNewest(false)}
           >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="3" y1="6" x2="9" y2="6" />
+              <line x1="3" y1="12" x2="15" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
             最旧在上
           </button>
         </div>
+        {/* 类型筛选 */}
+        <span className="wk-mp-activity__filter-wrap" ref={filterRef}>
+          <button
+            type="button"
+            className="wk-mp-activity__filter-btn"
+            onClick={() => setFilterOpen((o) => !o)}
+          >
+            <span>{currentFilter.label}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {filterOpen && (
+            <div className="wk-mp-activity__filter-dropdown">
+              {FILTER_OPTIONS.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  className={`wk-mp-activity__filter-item${o.id === filter ? " is-active" : ""}`}
+                  onClick={() => {
+                    setFilter(o.id);
+                    setFilterOpen(false);
+                  }}
+                >
+                  {o.label}
+                  {o.id === filter && <span>✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </span>
       </div>
+
       {loading && <div className="wk-mp-empty-tab">加载中...</div>}
       {!loading && sorted.length === 0 && (
         <div className="wk-mp-empty-tab">暂无变更记录</div>
       )}
       {!loading &&
-        sorted.map((a) => (
-          <div key={a.id} className="wk-mp-activity__row">
-            <span className="wk-mp-activity__time">
-              {formatActivityTime(a.created_at)}
-            </span>
-            <span className="wk-mp-activity__label">
-              {ACTION_LABELS[a.action] || a.action}
-            </span>
-            <span className="wk-mp-activity__content">
-              <ActivityContent activity={a} />
-            </span>
-            <span className="wk-mp-activity__actor">
-              <UserName uid={a.actor_id} />
-            </span>
-          </div>
-        ))}
+        sorted.map((a) => {
+          const isGoal = a.action === "description_changed";
+          return (
+            <div
+              key={a.id}
+              className={`wk-mp-activity__row${isGoal ? " wk-mp-activity__row--goal" : ""}`}
+            >
+              <span className="wk-mp-activity__time">
+                {formatActivityTime(a.created_at)}
+              </span>
+              <span
+                className={`wk-mp-activity__label${isGoal ? " wk-mp-activity__label--goal" : ""}`}
+              >
+                {ACTION_LABELS[a.action] || a.action}
+              </span>
+              <span className="wk-mp-activity__content">
+                <ActivityContent activity={a} />
+              </span>
+              <span className="wk-mp-activity__actor">
+                <WKAvatar
+                  channel={new Channel(a.actor_id, ChannelTypePerson)}
+                  style={{ width: 14, height: 14 }}
+                />
+                <UserName uid={a.actor_id} />
+              </span>
+            </div>
+          );
+        })}
     </div>
   );
 }
