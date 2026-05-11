@@ -100,14 +100,14 @@ describe('matterApi', () => {
   });
 
   describe('addComment', () => {
-    it('sends POST to /matters/:id/comments with content', async () => {
+    it('sends POST to /matters/:id/timeline with content', async () => {
       const mockResponse = { data: { id: 'c1', content: 'hello' } };
       mockAxios.post.mockResolvedValueOnce(mockResponse);
 
       const result = await matterApi.addComment('t1', 'hello');
 
       expect(mockAxios.post).toHaveBeenCalledWith(
-        '/matter/api/v1/matters/t1/comments',
+        '/matter/api/v1/matters/t1/timeline',
         { content: 'hello', attachments: undefined },
       );
       expect(result).toEqual(mockResponse.data);
@@ -120,14 +120,23 @@ describe('matterApi', () => {
       const result = await matterApi.addComment('t1', 'see file', [{ file_url: 'https://example.com/file.pdf' }]);
 
       expect(mockAxios.post).toHaveBeenCalledWith(
-        '/matter/api/v1/matters/t1/comments',
+        '/matter/api/v1/matters/t1/timeline',
         { content: 'see file', attachments: [{ file_url: 'https://example.com/file.pdf' }] },
       );
       expect(result).toEqual(mockResponse.data);
     });
 
-    it('rejects when both content and attachments are empty', async () => {
-      await expect(matterApi.addComment('t1', '')).rejects.toThrow('Comment must have content or attachments');
+    it('sends POST with empty content (content becomes undefined)', async () => {
+      const mockResponse = { data: { id: 'c1', content: '' } };
+      mockAxios.post.mockResolvedValueOnce(mockResponse);
+
+      const result = await matterApi.addComment('t1', '');
+
+      expect(mockAxios.post).toHaveBeenCalledWith(
+        '/matter/api/v1/matters/t1/timeline',
+        { content: undefined, attachments: undefined },
+      );
+      expect(result).toEqual(mockResponse.data);
     });
   });
 
@@ -184,14 +193,14 @@ describe('matterApi', () => {
   });
 
   describe('listComments', () => {
-    it('sends GET to /matters/:id/comments with pagination', async () => {
+    it('sends GET to /matters/:id/timeline with pagination', async () => {
       const mockResponse = { data: { data: [{ id: 'c1' }], pagination: { has_more: false } } };
       mockAxios.get.mockResolvedValueOnce(mockResponse);
 
       const result = await matterApi.listComments('t1', { limit: 20 });
 
       expect(mockAxios.get).toHaveBeenCalledWith(
-        '/matter/api/v1/matters/t1/comments',
+        '/matter/api/v1/matters/t1/timeline',
         { params: { limit: '20' } },
       );
       expect(result).toEqual(mockResponse.data);

@@ -734,8 +734,8 @@ export default function MatterDetailPanel({
                     )}
                   </div>
                   {/* 最新进展: 有 timeline 条目时显示最新一条 content,
-                      没有时整块隐藏 (不再显示 "暂无进展摘要") */}
-                  {latestByChannel.has(ch.channel_id) && (
+                      没有时整块隐藏。非成员不展示 (信息隔离) */}
+                  {isMember && latestByChannel.has(ch.channel_id) && (
                     <div className="wk-mp-channels__card-progress">
                       <div className="wk-mp-channels__card-progress-label">
                         最新进展
@@ -746,9 +746,8 @@ export default function MatterDetailPanel({
                       </div>
                     </div>
                   )}
-                  {/* 展开时间线: 按钮常显, 点击时 toggle 并 refetch。
-                      不再用 timeline.length > 0 做 gate, 否则空数据时
-                      用户连触发刷新的入口都没有 */}
+                  {/* 展开时间线: 仅成员可见, 非成员无权查看群消息衍生内容 */}
+                  {isMember && (
                   <div className="wk-mp-channels__card-actions">
                     <button
                       type="button"
@@ -830,6 +829,7 @@ export default function MatterDetailPanel({
                         />
                       );
                     })()}
+                  )}
                 </div>
                 );
               })

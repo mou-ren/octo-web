@@ -34,11 +34,22 @@ export function useMyGroups(): UseMyGroupsResult {
     const [groupNos, setGroupNos] = useState<Set<string>>(() => new Set());
     const [loading, setLoading] = useState(true);
     const [failed, setFailed] = useState(false);
+    const [spaceId, setSpaceId] = useState(() => WKApp.shared.currentSpaceId || '');
     // requestId 保护: spaceId 快速切换时丢弃过期响应
     const reqIdRef = useRef(0);
 
+    // 监听 space-changed 事件, 切换 Space 时重新拉取群列表
     useEffect(() => {
-        const spaceId = WKApp.shared.currentSpaceId;
+        const onSpaceChanged = () => {
+            setSpaceId(WKApp.shared.currentSpaceId || '');
+        };
+        WKApp.mittBus.on('wk:space-changed' as any, onSpaceChanged);
+        return () => {
+            WKApp.mittBus.off('wk:space-changed' as any, onSpaceChanged);
+        };
+    }, []);
+
+    useEffect(() => {
         if (!spaceId) {
             setGroupNos(new Set());
             setLoading(false);
@@ -48,6 +59,8 @@ export function useMyGroups(): UseMyGroupsResult {
         const reqId = ++reqIdRef.current;
         setLoading(true);
         setFailed(false);
+        // 切换时先清空旧数据, 保守处理 (宁可多遮)
+        setGroupNos(new Set());
         WKApp.apiClient
             .get('group/my', { param: { space_id: spaceId } })
             .then((resp: MyGroupRaw[] | undefined) => {
@@ -70,11 +83,9 @@ export function useMyGroups(): UseMyGroupsResult {
                 setLoading(false);
                 setFailed(true);
             });
-        // 只在组件挂载时拉一次。spaceId 切换时整个 MatterDetailPanel 一般已经
-        // 随路由重渲染, 触发 hook 重跑。如果真的要监听 space-changed 事件再
-        // 补 useEffect, 当前场景用不到。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+
+        return () => { reqIdRef.current++; };
+    }, [spaceId]);
 
     return { groupNos, loading, failed };
 }
