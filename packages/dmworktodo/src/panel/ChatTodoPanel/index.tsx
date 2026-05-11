@@ -195,7 +195,7 @@ export default function ChatMatterPanel({
 
   if (selectedMatterId) {
     return (
-      <div ref={panelRef}>
+      <div className="wk-mp-page-sidebar" ref={panelRef}>
         <div
           className={`wk-thread-panel-splitter${isDragging ? " wk-thread-panel-splitter-active" : ""}`}
           onMouseDown={onDragStart}
