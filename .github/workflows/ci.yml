@@ -38,8 +38,8 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
-  test:
-    name: test
+  test-libs:
+    name: test-libs
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -71,8 +71,8 @@ jobs:
           pnpm --filter @octo/datasource --filter @octo/login \
             run --if-present test
 
-  lint:
-    name: lint
+  lint-architecture:
+    name: lint-architecture
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
