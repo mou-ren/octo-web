@@ -1,0 +1,280 @@
+/**
+ * PersonaSettings minimal styles.
+ *
+ * Card 视觉复用 BotStore 的 `.wk-bot-card` 命名约定（颜色 / 圆角 / 阴影一致），
+ * 但局部追加 `.wk-persona-*` 修饰类以承载 persona-only 的徽章 / footer。
+ * 之所以不直接复用 BotStore 那个文件，是因为 PersonaSettings 的容器布局更宽
+ * （PC 端要承担更长的元信息），共享 class 会让 BotStore 的横纵比变形。
+ *
+ * 字体大小 / spacing 故意取自 BotStore 同名变量，CSS 变量不下放到组件级。
+ */
+
+.wk-persona-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-secondary);
+    padding: 12px;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.wk-persona-actions {
+    margin-bottom: 12px;
+}
+
+.wk-persona-add-btn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: var(--accent, #4e6ef2);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.2s;
+}
+
+.wk-persona-add-btn:hover {
+    opacity: 0.9;
+}
+
+.wk-persona-add-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.wk-persona-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Card — visual contract mirrors BotStore .wk-bot-card. */
+.wk-persona-card {
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    background: var(--card-bg, #fff);
+    border-radius: 10px;
+    border: 1px solid var(--border-color, #eee);
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+
+.wk-persona-card:hover {
+    transform: translateY(-1px);
+}
+
+.wk-persona-card-header {
+    display: flex;
+    align-items: center;
+}
+
+.wk-persona-card-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.wk-persona-card-info {
+    flex: 1;
+    margin-left: 12px;
+    min-width: 0;
+}
+
+.wk-persona-card-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.wk-persona-card-name-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(102, 126, 234, 0.15);
+    color: #667eea;
+    font-weight: 500;
+}
+
+.wk-persona-card-sub {
+    font-size: 12px;
+    color: var(--text-tertiary, #888);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wk-persona-card-status {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--text-tertiary, #888);
+}
+
+.wk-persona-card-status.on {
+    color: #2ecc71;
+}
+
+.wk-persona-card-status.off {
+    color: #c44;
+}
+
+.wk-persona-empty {
+    padding: 32px 0;
+    text-align: center;
+    color: var(--text-tertiary, #888);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.wk-persona-error {
+    padding: 24px 0;
+    text-align: center;
+    color: var(--text-tertiary, #888);
+    font-size: 13px;
+}
+
+.wk-persona-error-retry {
+    margin-top: 8px;
+    color: var(--accent, #4e6ef2);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.wk-persona-loading {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-tertiary);
+}
+
+/* PersonaEdit subpage */
+.wk-persona-edit {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-secondary);
+    overflow-y: auto;
+}
+
+.wk-persona-edit-section {
+    background: var(--card-bg, #fff);
+    margin: 12px;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.wk-persona-edit-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color, #f0f0f0);
+}
+
+.wk-persona-edit-row:last-child {
+    border-bottom: none;
+}
+
+.wk-persona-edit-row-title {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.wk-persona-edit-row-value {
+    font-size: 13px;
+    color: var(--text-tertiary, #888);
+}
+
+.wk-persona-edit-scope-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.wk-persona-edit-scope-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color, #f0f0f0);
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.wk-persona-edit-scope-row:last-child {
+    border-bottom: none;
+}
+
+.wk-persona-edit-scope-remove {
+    cursor: pointer;
+    color: #c44;
+    font-size: 12px;
+}
+
+.wk-persona-edit-scope-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-tertiary, #888);
+    font-size: 13px;
+}
+
+.wk-persona-edit-danger {
+    margin: 24px 12px 12px;
+    padding: 12px;
+    text-align: center;
+    background: var(--card-bg, #fff);
+    color: #c44;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* PersonaCreate — bot picker */
+.wk-persona-create {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 8px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.wk-persona-create-row {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--card-bg, #fff);
+    cursor: pointer;
+    border: 1px solid var(--border-color, #eee);
+}
+
+.wk-persona-create-row:hover {
+    border-color: var(--accent, #4e6ef2);
+}
+
+.wk-persona-create-row-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.wk-persona-create-row-sub {
+    font-size: 12px;
+    color: var(--text-tertiary, #888);
+    margin-top: 2px;
+}
