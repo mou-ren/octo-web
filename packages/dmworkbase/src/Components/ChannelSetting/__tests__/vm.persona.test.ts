@@ -297,7 +297,7 @@ describe("ChannelSettingVM.toggleOboScope — Round-2 P1 state machine", () => {
         // 唯一一次 POST，且 body 是 enabled=false 的排除记录
         expect(hoisted.post).toHaveBeenCalledTimes(1)
         const [url, body] = hoisted.post.mock.calls[0]
-        expect(url).toBe("/v1/obo/scopes")
+        expect(url).toBe("obo/scopes")
         expect(body).toMatchObject({
             grant_id: 7,
             channel_id: "ch-1",
@@ -322,7 +322,7 @@ describe("ChannelSettingVM.toggleOboScope — Round-2 P1 state machine", () => {
         await vm.toggleOboScope(true)
 
         expect(hoisted.del).toHaveBeenCalledTimes(1)
-        expect(hoisted.del.mock.calls[0][0]).toBe("/v1/obo/scopes/50")
+        expect(hoisted.del.mock.calls[0][0]).toBe("obo/scopes/50")
         // 删除后，因为 enable(true) === global(true)，不再 POST 新 scope
         expect(hoisted.post).not.toHaveBeenCalled()
         expect(vm._oboScope).toBeNull()
@@ -345,7 +345,7 @@ describe("ChannelSettingVM.toggleOboScope — Round-2 P1 state machine", () => {
 
         expect(hoisted.post).toHaveBeenCalledTimes(1)
         const [url, body] = hoisted.post.mock.calls[0]
-        expect(url).toBe("/v1/obo/scopes")
+        expect(url).toBe("obo/scopes")
         expect(body).toMatchObject({
             grant_id: 7,
             channel_id: "ch-1",
@@ -369,7 +369,7 @@ describe("ChannelSettingVM.toggleOboScope — Round-2 P1 state machine", () => {
         await vm.toggleOboScope(false)
 
         expect(hoisted.del).toHaveBeenCalledTimes(1)
-        expect(hoisted.del.mock.calls[0][0]).toBe("/v1/obo/scopes/60")
+        expect(hoisted.del.mock.calls[0][0]).toBe("obo/scopes/60")
         // enable(false) === global(false) → 删除后无需 POST
         expect(hoisted.post).not.toHaveBeenCalled()
         expect(vm._oboScope).toBeNull()

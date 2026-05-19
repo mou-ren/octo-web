@@ -93,7 +93,7 @@ describe("PersonaSettingsVM.loadGrants", () => {
         expect(vm.loading).toBe(false)
         expect(vm.loadError).toBe(false)
         expect(vm.isBackendMissing).toBe(false)
-        expect(hoisted.get).toHaveBeenCalledWith("/v1/obo/grants")
+        expect(hoisted.get).toHaveBeenCalledWith("obo/grants")
     })
 
     it("marks isBackendMissing on 404 without toasting", async () => {
@@ -134,12 +134,12 @@ describe("PersonaSettingsVM.createGrant", () => {
         const vm = new PersonaSettingsVM()
         const out = await vm.createGrant("b1")
         expect(out).toEqual(created)
-        expect(hoisted.post).toHaveBeenCalledWith("/v1/obo/grants", {
+        expect(hoisted.post).toHaveBeenCalledWith("obo/grants", {
             grantee_bot_uid: "b1",
             mode: "auto",
             global_enabled: false,
         })
-        expect(hoisted.get).toHaveBeenCalledWith("/v1/obo/grants")
+        expect(hoisted.get).toHaveBeenCalledWith("obo/grants")
         expect(vm.grants).toEqual([created])
     })
 
@@ -174,8 +174,8 @@ describe("PersonaSettingsVM.deleteGrant / updateGrant", () => {
         const vm = new PersonaSettingsVM()
         const ok = await vm.deleteGrant(42)
         expect(ok).toBe(true)
-        expect(hoisted.del).toHaveBeenCalledWith("/v1/obo/grants/42")
-        expect(hoisted.get).toHaveBeenCalledWith("/v1/obo/grants")
+        expect(hoisted.del).toHaveBeenCalledWith("obo/grants/42")
+        expect(hoisted.get).toHaveBeenCalledWith("obo/grants")
     })
 
     it("update calls PUT with patch object", async () => {
@@ -184,7 +184,7 @@ describe("PersonaSettingsVM.deleteGrant / updateGrant", () => {
         const vm = new PersonaSettingsVM()
         const ok = await vm.updateGrant(42, { global_enabled: true })
         expect(ok).toBe(true)
-        expect(hoisted.put).toHaveBeenCalledWith("/v1/obo/grants/42", { global_enabled: true })
+        expect(hoisted.put).toHaveBeenCalledWith("obo/grants/42", { global_enabled: true })
     })
 
     it("delete returns false and toasts on error", async () => {
@@ -205,7 +205,7 @@ describe("PersonaEditVM", () => {
         const vm = new PersonaEditVM(grant)
         await vm.loadScopes()
         expect(vm.scopes).toEqual(scopes)
-        expect(hoisted.get).toHaveBeenCalledWith("/v1/obo/grants/99/scopes")
+        expect(hoisted.get).toHaveBeenCalledWith("obo/grants/99/scopes")
     })
 
     it("loadScopes 404 → isBackendMissing", async () => {
@@ -222,7 +222,7 @@ describe("PersonaEditVM", () => {
         const ok = await vm.toggleGlobal(true)
         expect(ok).toBe(true)
         expect(vm.grant.global_enabled).toBe(true)
-        expect(hoisted.put).toHaveBeenCalledWith("/v1/obo/grants/99", { global_enabled: true })
+        expect(hoisted.put).toHaveBeenCalledWith("obo/grants/99", { global_enabled: true })
     })
 
     it("addScope POST then reloads", async () => {
@@ -231,7 +231,7 @@ describe("PersonaEditVM", () => {
         const vm = new PersonaEditVM(grant)
         const ok = await vm.addScope("c1", 2)
         expect(ok).toBe(true)
-        expect(hoisted.post).toHaveBeenCalledWith("/v1/obo/scopes", {
+        expect(hoisted.post).toHaveBeenCalledWith("obo/scopes", {
             grant_id: 99,
             channel_id: "c1",
             channel_type: 2,
@@ -245,7 +245,7 @@ describe("PersonaEditVM", () => {
         const vm = new PersonaEditVM(grant)
         const ok = await vm.removeScope(11)
         expect(ok).toBe(true)
-        expect(hoisted.del).toHaveBeenCalledWith("/v1/obo/scopes/11")
+        expect(hoisted.del).toHaveBeenCalledWith("obo/scopes/11")
     })
 
     it("deleteGrant DELETE /v1/obo/grants/:id", async () => {
@@ -253,7 +253,7 @@ describe("PersonaEditVM", () => {
         const vm = new PersonaEditVM(grant)
         const ok = await vm.deleteGrant()
         expect(ok).toBe(true)
-        expect(hoisted.del).toHaveBeenCalledWith("/v1/obo/grants/99")
+        expect(hoisted.del).toHaveBeenCalledWith("obo/grants/99")
     })
 })
 

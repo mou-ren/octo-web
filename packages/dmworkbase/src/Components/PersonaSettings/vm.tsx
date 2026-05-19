@@ -109,7 +109,7 @@ export class PersonaSettingsVM extends ProviderListener {
         this.isBackendMissing = false
         this.notifyListener()
         try {
-            const res = await WKApp.apiClient.get<OboGrant[]>(`/v1/obo/grants`)
+            const res = await WKApp.apiClient.get<OboGrant[]>(`obo/grants`)
             this.grants = Array.isArray(res) ? res : []
         } catch (e: any) {
             this.grants = []
@@ -161,7 +161,7 @@ export class PersonaSettingsVM extends ProviderListener {
      */
     async createGrant(granteeBotUid: string): Promise<OboGrant | undefined> {
         try {
-            const res = await WKApp.apiClient.post(`/v1/obo/grants`, {
+            const res = await WKApp.apiClient.post(`obo/grants`, {
                 grantee_bot_uid: granteeBotUid,
                 mode: "auto",
                 global_enabled: false,
@@ -182,7 +182,7 @@ export class PersonaSettingsVM extends ProviderListener {
     /** 撤销（软删除）一个 grant。删除成功后 UI 应自行 pop / reload。 */
     async deleteGrant(id: number): Promise<boolean> {
         try {
-            await WKApp.apiClient.delete(`/v1/obo/grants/${id}`)
+            await WKApp.apiClient.delete(`obo/grants/${id}`)
             await this.loadGrants()
             return true
         } catch (e) {
@@ -194,7 +194,7 @@ export class PersonaSettingsVM extends ProviderListener {
     /** 切换 global_enabled 或 mode；服务端用 PATCH-like 语义合并。 */
     async updateGrant(id: number, patch: Partial<Pick<OboGrant, "global_enabled" | "mode">>): Promise<boolean> {
         try {
-            await WKApp.apiClient.put(`/v1/obo/grants/${id}`, patch)
+            await WKApp.apiClient.put(`obo/grants/${id}`, patch)
             await this.loadGrants()
             return true
         } catch (e) {
@@ -233,7 +233,7 @@ export class PersonaEditVM extends ProviderListener {
         this.isBackendMissing = false
         this.notifyListener()
         try {
-            const res = await WKApp.apiClient.get<OboScope[]>(`/v1/obo/grants/${this.grant.id}/scopes`)
+            const res = await WKApp.apiClient.get<OboScope[]>(`obo/grants/${this.grant.id}/scopes`)
             this.scopes = Array.isArray(res) ? res : []
         } catch (e: any) {
             this.scopes = []
@@ -250,7 +250,7 @@ export class PersonaEditVM extends ProviderListener {
 
     async addScope(channelId: string, channelType: number): Promise<boolean> {
         try {
-            await WKApp.apiClient.post(`/v1/obo/scopes`, {
+            await WKApp.apiClient.post(`obo/scopes`, {
                 grant_id: this.grant.id,
                 channel_id: channelId,
                 channel_type: channelType,
@@ -266,7 +266,7 @@ export class PersonaEditVM extends ProviderListener {
 
     async removeScope(id: number): Promise<boolean> {
         try {
-            await WKApp.apiClient.delete(`/v1/obo/scopes/${id}`)
+            await WKApp.apiClient.delete(`obo/scopes/${id}`)
             await this.loadScopes()
             return true
         } catch (e) {
@@ -277,7 +277,7 @@ export class PersonaEditVM extends ProviderListener {
 
     async toggleGlobal(enabled: boolean): Promise<boolean> {
         try {
-            await WKApp.apiClient.put(`/v1/obo/grants/${this.grant.id}`, { global_enabled: enabled })
+            await WKApp.apiClient.put(`obo/grants/${this.grant.id}`, { global_enabled: enabled })
             this.grant = { ...this.grant, global_enabled: enabled }
             this.notifyListener()
             return true
@@ -289,7 +289,7 @@ export class PersonaEditVM extends ProviderListener {
 
     async deleteGrant(): Promise<boolean> {
         try {
-            await WKApp.apiClient.delete(`/v1/obo/grants/${this.grant.id}`)
+            await WKApp.apiClient.delete(`obo/grants/${this.grant.id}`)
             return true
         } catch (e) {
             Toast.error(extractErrorMsg(e) || "撤销分身失败")
@@ -352,7 +352,7 @@ export function refreshActiveGrantCache(): Promise<boolean> {
     if (inFlight) return inFlight
     const p: Promise<boolean> = (async () => {
         try {
-            const res = await WKApp.apiClient.get<OboGrant[]>(`/v1/obo/grants`)
+            const res = await WKApp.apiClient.get<OboGrant[]>(`obo/grants`)
             const list = Array.isArray(res) ? res : []
             // P1-2: 仅看 active，不再耦合 global_enabled，否则纯 per-channel scope
             // 模式下 toggle 永远不显示。
