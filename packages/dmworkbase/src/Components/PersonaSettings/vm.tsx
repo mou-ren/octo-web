@@ -131,8 +131,10 @@ export class PersonaSettingsVM extends ProviderListener {
             this.isBackendMissing = false
             this.notifyListener()
             try {
-                const res = await WKApp.apiClient.get<OboGrant[]>(`obo/grants`)
-                this.grants = Array.isArray(res) ? res : []
+                const res = await WKApp.apiClient.get<any>(`obo/grants`)
+                // API returns {items: [...]} envelope; unwrap it.
+                const arr = Array.isArray(res) ? res : (res && Array.isArray(res.items) ? res.items : [])
+                this.grants = arr as OboGrant[]
             } catch (e: any) {
                 this.grants = []
                 if (e && typeof e === "object" && "status" in e && (e as any).status === 404) {
@@ -258,8 +260,10 @@ export class PersonaEditVM extends ProviderListener {
         this.isBackendMissing = false
         this.notifyListener()
         try {
-            const res = await WKApp.apiClient.get<OboScope[]>(`obo/grants/${this.grant.id}/scopes`)
-            this.scopes = Array.isArray(res) ? res : []
+            const res = await WKApp.apiClient.get<any>(`obo/grants/${this.grant.id}/scopes`)
+            // API returns {items: [...]} envelope; unwrap it.
+            const arr = Array.isArray(res) ? res : (res && Array.isArray(res.items) ? res.items : [])
+            this.scopes = arr as OboScope[]
         } catch (e: any) {
             this.scopes = []
             if (e && typeof e === "object" && "status" in e && (e as any).status === 404) {
@@ -377,8 +381,10 @@ export function refreshActiveGrantCache(): Promise<boolean> {
     if (inFlight) return inFlight
     const p: Promise<boolean> = (async () => {
         try {
-            const res = await WKApp.apiClient.get<OboGrant[]>(`obo/grants`)
-            const list = Array.isArray(res) ? res : []
+            const res = await WKApp.apiClient.get<any>(`obo/grants`)
+            // API returns {items: [...]} envelope; unwrap it.
+            const raw = Array.isArray(res) ? res : (res && Array.isArray(res.items) ? res.items : [])
+            const list: OboGrant[] = raw
             // P1-2: 仅看 active，不再耦合 global_enabled，否则纯 per-channel scope
             // 模式下 toggle 永远不显示。
             const v = list.some((g) => g.active)
