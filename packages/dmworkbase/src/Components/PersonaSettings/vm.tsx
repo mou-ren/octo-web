@@ -90,9 +90,23 @@ export class PersonaSettingsVM extends ProviderListener {
     myBots: MyBot[] = []
     myBotsLoading: boolean = false
 
-    didMount(): void {
-        void this.loadGrants()
-    }
+    /**
+     * BUG-1 fix (YUJ-1341, 2026-05-19)：原实现在 VM 的 `didMount()` 里自动 `loadGrants()`，
+     * 依赖 `Provider.componentDidMount → listener.didMount()` 这条隐式链路触发。E2E
+     * 复现了 grant 已存在却渲染空态的 bug：在 React 18 + 父级 WKViewQueue 的环境下，
+     * Provider 的 componentDidMount 时机与 React 子组件的 componentDidMount 之间有
+     * 微妙的时序差异（子组件先 mount → 也尝试 loadGrants → 与 VM 的 didMount 撞车，
+     * 后到的覆盖前到的 `vm.grants`）。
+     *
+     * 现在改成「单一触发源 = PersonaListBody.componentDidMount」，VM 不再在 didMount
+     * 里自动启动加载。如果未来有别处用同一个 VM, 应当在挂载时显式调用 loadGrants()，
+     * 与 PersonaCreate.loadMyBots 的用法对齐。
+     *
+     * 为避免历史调用（如重试按钮、createGrant 后 reload、PersonaEdit onChange 回调）
+     * 与 mount 时的首次 load 撞车，我们在 loadGrants 内部加一个 in-flight 守卫：
+     * 同时只允许一个请求在飞，重入调用直接复用同一个 Promise。详见 loadGrants 注释。
+     */
+    private loadGrantsInFlight: Promise<void> | undefined
 
     /**
      * 拉取当前用户的所有 OBO grants。
@@ -102,26 +116,37 @@ export class PersonaSettingsVM extends ProviderListener {
      *   - 其他错误 → 不弹 Toast，标记 loadError=true，UI 显示「加载失败 + 重试」
      *   - 之所以不 Toast：本页是「设置入口」，用户进来就想看列表，弹 Toast 会与
      *     页面内空态文案叠加，体验冗余。
+     *
+     * In-flight 守卫 (BUG-1, YUJ-1341)：同一时刻只允许一个请求在飞，重入调用复用
+     * 同一个 Promise。这是为了让「mount 时触发」与「createGrant/deleteGrant/retry
+     * 等业务路径触发」之间不会撞车 —— 之前 race 时第二次的响应会覆盖第一次写入的
+     * grants（mock 测试里第二次甚至拿到 undefined，把列表清空）。生产同样可能发生：
+     * 服务端两次返回顺序不保证按调用顺序到达。
      */
     async loadGrants(): Promise<void> {
-        this.loading = true
-        this.loadError = false
-        this.isBackendMissing = false
-        this.notifyListener()
-        try {
-            const res = await WKApp.apiClient.get<OboGrant[]>(`obo/grants`)
-            this.grants = Array.isArray(res) ? res : []
-        } catch (e: any) {
-            this.grants = []
-            if (e && typeof e === "object" && "status" in e && (e as any).status === 404) {
-                this.isBackendMissing = true
-            } else {
-                this.loadError = true
-            }
-        } finally {
-            this.loading = false
+        if (this.loadGrantsInFlight) return this.loadGrantsInFlight
+        this.loadGrantsInFlight = (async () => {
+            this.loading = true
+            this.loadError = false
+            this.isBackendMissing = false
             this.notifyListener()
-        }
+            try {
+                const res = await WKApp.apiClient.get<OboGrant[]>(`obo/grants`)
+                this.grants = Array.isArray(res) ? res : []
+            } catch (e: any) {
+                this.grants = []
+                if (e && typeof e === "object" && "status" in e && (e as any).status === 404) {
+                    this.isBackendMissing = true
+                } else {
+                    this.loadError = true
+                }
+            } finally {
+                this.loading = false
+                this.loadGrantsInFlight = undefined
+                this.notifyListener()
+            }
+        })()
+        return this.loadGrantsInFlight
     }
 
     /**

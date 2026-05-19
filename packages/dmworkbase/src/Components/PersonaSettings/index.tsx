@@ -55,10 +55,41 @@ export default class PersonaSettings extends Component<PersonaSettingsProps> {
  * 列表 body —— 抽出来是为了让 PersonaListBody 在 vm.notifyListener() 后能感知到。
  * RouteContext 不参与 Provider 的渲染节流（Provider 的 render prop 才会订阅 vm），
  * 所以我们把 routeContext 透传给 body, body 再用 vm 渲染。
+ *
+ * BUG-1 fix (YUJ-1341, 2026-05-19)：之前只依赖 `PersonaSettingsVM.didMount()` 走
+ * `Provider.componentDidMount` 这条链来触发 `loadGrants()`。E2E 实测发现 grant
+ * 已存在 (id=1, active=1) 时列表仍渲染「还没有创建任何分身」—— 根因是 VM 端的
+ * `didMount` 触发链在 `Provider` 重渲染、StrictMode 双 mount、或父级 WKViewQueue
+ * push 期间不够稳：第一帧 PersonaListBody 已经用初值 `grants=[]` 渲染了「还没有
+ * 创建任何分身」空态，而 Provider.componentDidMount 才在之后跑 didMount → loadGrants,
+ * 中间任何一次 setState 没把后续的 notifyListener 接回 DOM，列表就永远停在空态。
+ *
+ * 解决：把 PersonaListBody 改成一个最小 class 组件，在 `componentDidMount` 里显式
+ * 自拉一次 grants（带 `vm.loading` 守卫与「已加载/已错」守卫，避免与 VM 的 didMount
+ * 重复 GET）。视图层自己保证「至少触发过一次」语义，不再依赖 Provider/ProviderListener
+ * 的隐式生命周期。组件保持 class 形态（而非 hooks）是因为 dmworkbase 仍是 React 17，
+ * 与 testing-library/react 18 同时存在时 hook 会报 "Invalid hook call"。
  */
-function PersonaListBody(props: { vm: PersonaSettingsVM; routeContext: RouteContext<any> }) {
-    const { vm, routeContext } = props
-    const handleCreate = () => {
+interface PersonaListBodyProps {
+    vm: PersonaSettingsVM
+    routeContext: RouteContext<any>
+}
+
+class PersonaListBody extends Component<PersonaListBodyProps> {
+    componentDidMount(): void {
+        const { vm } = this.props
+        // 与 VM.didMount 的 loadGrants 重复触发是无害的（最坏多一次 GET，且第二次
+        // 会被 loading 守卫挡掉），但「至少一次」是必须的：当 Provider 链路因任何
+        // 原因没把 VM.didMount 拉起来时，这里兜底。
+        const alreadyLoaded =
+            vm.grants.length > 0 || vm.loadError || vm.isBackendMissing
+        if (!vm.loading && !alreadyLoaded) {
+            void vm.loadGrants()
+        }
+    }
+
+    private handleCreate = (): void => {
+        const { vm, routeContext } = this.props
         // 进入「选择 bot」子页：复用 RouteContext.push, 与 MeInfo 同款交互
         routeContext.push(
             <PersonaCreate
@@ -84,86 +115,89 @@ function PersonaListBody(props: { vm: PersonaSettingsVM; routeContext: RouteCont
         )
     }
 
-    return (
-        <div className="wk-persona-page">
-            {/*
-             * R4 非阻塞 (YUJ-1206 / GH octo-web#47 review 2026-05-19)：后端 404 时
-             * 隐藏「新建分身」按钮 —— 它点击后会试图 POST /v1/obo/grants，结果只能
-             * 报 Toast 错误，与上面「分身功能即将上线」文案自相矛盾。
-             */}
-            {!vm.isBackendMissing && (
-                <div className="wk-persona-actions">
-                    <button
-                        className="wk-persona-add-btn"
-                        onClick={handleCreate}
-                        disabled={vm.loading}
-                    >
-                        + 新建分身
-                    </button>
-                </div>
-            )}
-
-            {vm.loading && (
-                <div className="wk-persona-loading">加载中...</div>
-            )}
-
-            {/* 后端 404（PR-A 尚未 merge）→ 不报错, 用「即将上线」文案 */}
-            {!vm.loading && vm.isBackendMissing && (
-                <div className="wk-persona-empty">
-                    分身功能即将上线
-                    <br />
-                    敬请期待 ✨
-                </div>
-            )}
-
-            {/* 其他网络/服务端错误 → 显示重试按钮 */}
-            {!vm.loading && vm.loadError && !vm.isBackendMissing && (
-                <div className="wk-persona-error">
-                    加载失败
-                    <div
-                        className="wk-persona-error-retry"
-                        onClick={() => void vm.loadGrants()}
-                    >
-                        重新加载
-                    </div>
-                </div>
-            )}
-
-            {/* 正常空态 */}
-            {!vm.loading &&
-                !vm.isBackendMissing &&
-                !vm.loadError &&
-                vm.grants.length === 0 && (
-                    <div className="wk-persona-empty">
-                        还没有创建任何分身
-                        <br />
-                        点击上方「新建分身」开始
+    render(): ReactNode {
+        const { vm, routeContext } = this.props
+        return (
+            <div className="wk-persona-page">
+                {/*
+                 * R4 非阻塞 (YUJ-1206 / GH octo-web#47 review 2026-05-19)：后端 404 时
+                 * 隐藏「新建分身」按钮 —— 它点击后会试图 POST /v1/obo/grants，结果只能
+                 * 报 Toast 错误，与上面「分身功能即将上线」文案自相矛盾。
+                 */}
+                {!vm.isBackendMissing && (
+                    <div className="wk-persona-actions">
+                        <button
+                            className="wk-persona-add-btn"
+                            onClick={this.handleCreate}
+                            disabled={vm.loading}
+                        >
+                            + 新建分身
+                        </button>
                     </div>
                 )}
 
-            {/* 列表 */}
-            <div className="wk-persona-list">
-                {vm.grants.map((g) => (
-                    <PersonaCard
-                        key={g.id}
-                        grant={g}
-                        onClick={() => {
-                            routeContext.push(
-                                <PersonaEdit
-                                    grant={g}
-                                    onDeleted={() => {
-                                        routeContext.pop()
-                                        void vm.loadGrants()
-                                    }}
-                                    onChange={() => void vm.loadGrants()}
-                                />,
-                            )
-                        }}
-                    />
-                ))}
+                {vm.loading && (
+                    <div className="wk-persona-loading">加载中...</div>
+                )}
+
+                {/* 后端 404（PR-A 尚未 merge）→ 不报错, 用「即将上线」文案 */}
+                {!vm.loading && vm.isBackendMissing && (
+                    <div className="wk-persona-empty">
+                        分身功能即将上线
+                        <br />
+                        敬请期待 ✨
+                    </div>
+                )}
+
+                {/* 其他网络/服务端错误 → 显示重试按钮 */}
+                {!vm.loading && vm.loadError && !vm.isBackendMissing && (
+                    <div className="wk-persona-error">
+                        加载失败
+                        <div
+                            className="wk-persona-error-retry"
+                            onClick={() => void vm.loadGrants()}
+                        >
+                            重新加载
+                        </div>
+                    </div>
+                )}
+
+                {/* 正常空态 */}
+                {!vm.loading &&
+                    !vm.isBackendMissing &&
+                    !vm.loadError &&
+                    vm.grants.length === 0 && (
+                        <div className="wk-persona-empty">
+                            还没有创建任何分身
+                            <br />
+                            点击上方「新建分身」开始
+                        </div>
+                    )}
+
+                {/* 列表 */}
+                <div className="wk-persona-list">
+                    {vm.grants.map((g) => (
+                        <PersonaCard
+                            key={g.id}
+                            grant={g}
+                            onClick={() => {
+                                routeContext.push(
+                                    <PersonaEdit
+                                        grant={g}
+                                        onDeleted={() => {
+                                            routeContext.pop()
+                                            void vm.loadGrants()
+                                        }}
+                                        onChange={() => void vm.loadGrants()}
+                                    />,
+                                )
+                            }}
+                        />
+                    ))}
+                </div>
             </div>
-        </div>
-    )
+        )
+    }
 }
 
 /**
