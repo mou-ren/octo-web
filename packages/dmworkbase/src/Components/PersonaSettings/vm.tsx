@@ -306,7 +306,7 @@ export class PersonaEditVM extends ProviderListener {
 
     async toggleGlobal(enabled: boolean): Promise<boolean> {
         try {
-            await WKApp.apiClient.put(`obo/grants/${this.grant.id}`, { global_enabled: enabled })
+            await WKApp.apiClient.put(`obo/grants/${this.grant.id}`, { global_enabled: enabled ? 1 : 0 })
             this.grant = { ...this.grant, global_enabled: enabled }
             this.notifyListener()
             return true
