@@ -58,7 +58,11 @@ export function buildMessageMentions(
   if (!flags) return base;
 
   const all = flags.all === true || flags.all === 1;
-  const highlightAll = !!flags.humans || all;
+  // Plan X: when ais flag is set, all=1 is a backward-compat artifact of the
+  // server rewrite (legacy @所有人 → ais=1 + preserve all=1). Do not render
+  // the @所有人 pill from all alone when ais is present — only render it from
+  // explicit humans=1.
+  const highlightAll = !!flags.humans || (!flags.ais && all);
   const highlightAis = !!flags.ais;
 
   const synthetic: MentionRenderInfo[] = [];
