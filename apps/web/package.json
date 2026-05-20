@@ -119,5 +119,10 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  }
+  },
+  "author": {
+    "name": "Mininglamp Technology",
+    "email": "dev@mlamp.cn"
+  },
+  "description": "OCTO - Enterprise Instant Messaging"
 }

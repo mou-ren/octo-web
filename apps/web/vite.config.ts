@@ -27,6 +27,10 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    // Electron loads index.html via file:// protocol, so asset paths must be
+    // relative ("./assets/...") instead of absolute ("/assets/...").
+    // './' is also compatible with web deployments behind a reverse proxy.
+    base: './',
     plugins: [
       // 在 HTML <head> 注入 <meta name="app-version">，供构建后验证版本号是否正确写入
       {
